@@ -1,0 +1,133 @@
+# Codewart
+
+A desktop helper for reviewing code written by coding agents. Point it at a repo or any of its worktrees, step through what the agent did commit by commit, follow new functions through a call-chain diagram, and send review comments straight back to the agent session.
+
+Built with Tauri 2 (Rust) + React. Runs on macOS, Linux and Windows.
+
+## Quick start
+
+```sh
+make setup      # check toolchains, install npm deps, fetch crates
+make dev        # run with hot reload, opening this repo
+make dev P=~/work/api.feat-x   # …or any repo / worktree
+make install    # build, install the app and the `wart` CLI
+```
+
+Then, from any project root, worktree, or folder of repos:
+
+```sh
+wart .              # opens the current directory
+wart ../other       # if Codewart is already running, opens as a new tab
+```
+
+`codewart` is installed as an alias of `wart`.
+
+## Installing on other machines
+
+Tauri builds native installers per OS (it can't cross-compile):
+
+| Command | Output |
+| --- | --- |
+| `make dist` on macOS | `release/Codewart_<v>_universal.dmg` + `.app.zip` (Apple Silicon + Intel) |
+| `make dist` on Linux | `.deb`, `.AppImage`, `.rpm` |
+| `make dist` on Windows | `.msi` and setup `.exe` |
+| `make release` | tags `v<version>` and pushes; `.github/workflows/release.yml` builds all three platforms and attaches them to a draft GitHub release |
+
+On the other machine, install the app, open it once and click **Install `wart`** in the top bar. This writes a launcher that points at wherever the app is installed:
+
+* macOS/Linux: into `~/.local/bin`, `~/bin`, `/usr/local/bin` or `/opt/homebrew/bin`, whichever is on `PATH` and writable
+* Windows: `wart.cmd` into `%LOCALAPPDATA%\Microsoft\WindowsApps`
+
+**macOS Gatekeeper:** unsigned builds are blocked on other Macs ("app is damaged / can't be opened"). Either right-click → Open once, or run `xattr -dr com.apple.quarantine /Applications/Codewart.app`. For proper distribution, add the Apple signing secrets listed in `release.yml` and CI signs and notarizes the build.
+
+**Linux:** the app needs WebKitGTK 4.1 (`libwebkit2gtk-4.1-0`), which the `.deb` declares.
+
+Run `make` to see every command.
+
+## Layout
+
+| Row | Contents |
+| --- | --- |
+| 1 | Tabs of open projects (repos opened together from one folder form a colour-framed group that moves as one), `+` to open another, theme toggle |
+| 2 | Worktree / branch dropdown · commits ahead / uncommitted stats · **Diff ⇄ Call chain** toggle |
+| 3 | Back · related repos of the group (quick jump) · filter pills (hide tests, hide non-functional, ignore whitespace) · open in editor / terminal / Finder |
+| Left | Commit history of the branch since it forked from the default branch, plus uncommitted work. Modes: `single`, `range` (click two commits or shift-click), `all` |
+| Centre | Unified diff of the selection, or the call-chain canvas |
+| Right | Changed files (scrolls), then the review: line comments plus markdown notes, copied to the clipboard or sent to the agent session |
+
+### Project identification
+
+Open a project from its main checkout or from any linked worktree and you get the same tab: Codewart resolves the main worktree via `git worktree list` and lists all its siblings in the dropdown. The default branch comes from `origin/HEAD`, falling back to `main`, `master`, `trunk` or `develop`.
+
+### Multi-repo folders
+
+Open a folder that isn't a repository itself but contains several (up to two levels deep), e.g. a feature folder with worktrees of `api/` and `web/`. Every repository opens as a tab in one **group**: a colour-framed set of adjacent tabs with the folder name. Drag the group label to move the whole group, or close it with the group's ×.
+
+Next to the Back button, the other repos of the group appear as pills. Clicking one switches to it **on its worktree for the same branch**, if it has one (green outline). Otherwise it switches to that repo's current worktree.
+
+### Filters
+
+* **Hide tests**: `*.test.*`, `*.spec.*`, `*_test.go`, `test_*.py`, `tests/`, `__tests__/`, fixtures, snapshots…
+* **Hide non-functional**: lockfiles, assets and binaries, generated or minified code, docs, editor/tool config, pure renames, and files where only whitespace or only comments changed.
+* **Ignore whitespace**: passes `-w` to git, so indentation-only hunks disappear inside the files that remain.
+
+Hidden files are listed under the file list with the reason each was hidden, and you can bring them back.
+
+### Call chain
+
+The canvas shows every function the selection **added, changed, moved or deleted**. When one of them calls another, they're drawn as a connected flow (left to right, caller → callee). New call sites are drawn in the accent colour. Functions with no connections are shown as cards with a small diff of their change. Switch to **+ callers & callees** to also show unchanged neighbours, including callers anywhere in the repo (found with `git grep`).
+
+Click a function for details, double-click to jump to it in the diff, or comment on it directly. Drag to pan; ⌘/ctrl + scroll to zoom.
+
+Extraction is heuristic and has no per-language dependencies: comments and strings are masked out, definitions are matched per language, and bodies are delimited by braces or indentation. Supported: Rust, TypeScript/JavaScript (including object-literal methods), Python, Go, Ruby, Java, Kotlin, Swift, C/C++, C#, PHP, Scala and Dart. Calls are resolved by name, so a heavily overloaded name can link to the wrong target.
+
+### Sending reviews to the agent
+
+Click any line in the diff to comment; drag over line numbers or shift-click for a range. Click a comment (or its line) again to edit it. Comments collect in the review pane together with free-form markdown. Then either:
+
+* **Copy**: the compiled markdown (file:line, optional code snippet, comment) goes to the clipboard, ready to paste anywhere.
+* **Send to session**: Codewart finds terminal panes whose working directory is inside the worktree in **tmux**, **WezTerm** or **kitty** (with `allow_remote_control`), puts agent panes (Claude Code, Codex, Aider, Gemini…) first, and pastes the review there. "Press Enter after send" submits it.
+
+### Follow agent
+
+With **Follow agent** on, Codewart polls the worktree (HEAD + `git status` + file mtimes) every 1.5 s. It reloads when anything changes and jumps to the newest commit or the uncommitted work.
+
+## Keyboard
+
+| Key | Action |
+| --- | --- |
+| `j` / `k` | next / previous commit |
+| `[` / `]` | previous / next file |
+| `v` | toggle diff / call chain |
+| `r` | refresh |
+| `⏎` / `⇧⏎` | submit comment / new line in comment |
+| `⌥←` | back |
+
+## Configuration
+
+| Env var | Purpose |
+| --- | --- |
+| `CODEWART_EDITOR` | editor command, e.g. `code`, `cursor`, `zed`, `idea`. Default: first one found on `PATH` (Cursor, VS Code, Zed, Windsurf, Sublime, JetBrains…) |
+| `CODEWART_TERMINAL` | terminal app (macOS, e.g. `iTerm`) or command (Linux/Windows). Default: Ghostty / iTerm / Warp / WezTerm / kitty / Alacritty if installed, else Terminal |
+| `CODEWART_APP`, `CODEWART_BIN` | where the `codewart` launcher looks for the app |
+
+## Project structure
+
+```
+src/                      React UI
+  components/Workspace    per-project state: selection, loading, follow, keyboard
+  components/DiffView     stacked unified diff with inline comments
+  components/CallGraphView canvas call-chain renderer (layout, pan/zoom, hit testing)
+src-tauri/src/
+  git.rs                  git CLI wrapper, project/worktree discovery, history
+  diff.rs                 selection → git diff, unified diff parser
+  classify.rs             test / non-functional detection
+  callgraph.rs            function extraction and call graph
+  session.rs              tmux / WezTerm / kitty discovery and injection
+  actions.rs              editor, terminal, file manager
+  e2e_tests.rs            tests against a real temp repo with a worktree
+assets/brand/             logo, signet, wordmark, app icons (see its README)
+scripts/wart              CLI launcher (`wart`, alias `codewart`)
+```
+
+`make test` runs the Rust unit and end-to-end tests plus the TypeScript type-check. `make ci` also checks formatting, clippy and the production UI build.

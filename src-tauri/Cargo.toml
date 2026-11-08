@@ -1,0 +1,29 @@
+[package]
+name = "codewart"
+version = "0.1.0"
+description = "Review diffs and call chains produced by coding agents"
+authors = ["Byte Brothers"]
+edition = "2021"
+rust-version = "1.80"
+
+[lib]
+name = "codewart_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+regex = "1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

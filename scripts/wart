@@ -1,0 +1,49 @@
+#!/bin/sh
+# wart — Codewart launcher. Opens a project, worktree or folder of repos.
+#
+#   wart              open the current directory
+#   wart PATH...      open one or more repos / worktrees / folders of repos
+#
+# If Codewart is already running, projects open as new tabs there.
+# @CODEWART_BIN@
+set -e
+
+case "$1" in
+  -h|--help|-V|--version) ;;
+  *) [ $# -eq 0 ] && set -- "$PWD" ;;
+esac
+
+find_bin() {
+  if [ -n "$CODEWART_BIN" ] && [ -x "$CODEWART_BIN" ]; then echo "$CODEWART_BIN"; return; fi
+  for app in "$CODEWART_APP" "/Applications/Codewart.app" "$HOME/Applications/Codewart.app"; do
+    [ -n "$app" ] && [ -d "$app/Contents/MacOS" ] || continue
+    for b in "$app/Contents/MacOS/"*; do
+      [ -x "$b" ] && { echo "$b"; return; }
+    done
+  done
+  for b in "$(dirname "$0")/codewart-app" /usr/local/bin/codewart-app /usr/bin/codewart /usr/bin/codewart-app /opt/codewart/codewart; do
+    [ -x "$b" ] && { echo "$b"; return; }
+  done
+}
+
+BIN="$(find_bin)"
+if [ -z "$BIN" ]; then
+  echo "wart: Codewart app not found. Install it, or set CODEWART_APP / CODEWART_BIN." >&2
+  exit 1
+fi
+
+case "$1" in
+  -h|--help|-V|--version) exec "$BIN" "$@" ;;
+esac
+
+# Resolve relative paths here so the app gets absolute ones.
+for arg in "$@"; do
+  case "$arg" in
+    /*) set -- "$@" "$arg" ;;
+    -*) set -- "$@" "$arg" ;;
+    *) set -- "$@" "$(cd "$arg" 2>/dev/null && pwd || echo "$PWD/$arg")" ;;
+  esac
+  shift
+done
+
+CODEWART_CWD="$PWD" nohup "$BIN" "$@" >/dev/null 2>&1 &
