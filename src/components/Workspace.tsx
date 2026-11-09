@@ -24,7 +24,7 @@ import { FilesPane } from "./FilesPane";
 import { FilterBar } from "./FilterBar";
 import { HistoryPane, WORKING, historyKeys } from "./HistoryPane";
 import { ReviewPane } from "./ReviewPane";
-import { Splitter } from "./Splitter";
+import { Splitter, toggleLeftPane } from "./Splitter";
 import { WorktreeBar } from "./WorktreeBar";
 
 interface Props {
@@ -420,6 +420,11 @@ export const Workspace = memo(function Workspace({
         goBack();
         return;
       }
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        toggleLeftPane();
+        return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "j" || e.key === "k") {
         if (!keys.length) return;
@@ -589,6 +594,7 @@ export const Workspace = memo(function Workspace({
       <footer className="statusbar">
         <span>{tildify(worktree)}</span>
         <span className="grow" />
+        <span>⌘B sidebar</span>
         <span>j/k history</span>
         <span>[ ] files</span>
         <span>v toggle view</span>

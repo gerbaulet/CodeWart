@@ -132,3 +132,26 @@ export function Splitter({ size, axis, sign, label }: Props) {
     />
   );
 }
+
+// ---- collapsible left pane -------------------------------------------------
+// Like the sizes, this is a class on <html> so toggling never re-renders the
+// workspaces; it is shared across repos and survives restarts.
+const LEFT_STORE = "codewart.leftCollapsed";
+const LEFT_CLASS = "left-collapsed";
+
+export function initLeftPane() {
+  try {
+    if (localStorage.getItem(LEFT_STORE) === "1") document.documentElement.classList.add(LEFT_CLASS);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+export function toggleLeftPane(collapse?: boolean) {
+  const on = document.documentElement.classList.toggle(LEFT_CLASS, collapse);
+  try {
+    localStorage.setItem(LEFT_STORE, on ? "1" : "0");
+  } catch {
+    /* storage unavailable */
+  }
+}

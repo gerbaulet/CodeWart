@@ -99,3 +99,6 @@ export const Send = (p: P) => (
 export const Comment = (p: P) => (
   <svg {...base(p)}><path d="M2.5 3.5a1.5 1.5 0 011.5-1.5h8a1.5 1.5 0 011.5 1.5v6a1.5 1.5 0 01-1.5 1.5H7l-3 2.5V11H4a1.5 1.5 0 01-1.5-1.5z" /></svg>
 );
+export const SidebarIcon = (p: P) => (
+  <svg {...base(p)}><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" /><path d="M6 2.75v10.5" /></svg>
+);

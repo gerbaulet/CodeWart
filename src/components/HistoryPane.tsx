@@ -1,4 +1,6 @@
 import type { History, HistoryMode } from "../types";
+import { toggleLeftPane } from "./Splitter";
+import { SidebarIcon } from "./Icons";
 import { relativeTime } from "../util";
 
 export const WORKING = "working";
@@ -31,7 +33,13 @@ export function HistoryPane({ history, mode, onMode, selected, onPick, follow, o
 
   return (
     <aside className="pane fl history" aria-label="Commit history">
+      <button className="iconbtn left-expand" onClick={() => toggleLeftPane(false)} aria-label="Show history" data-tip="Show history (⌘B)" data-tip-left>
+        <SidebarIcon />
+      </button>
       <div className="panehead">
+        <button className="iconbtn left-collapse" onClick={() => toggleLeftPane(true)} aria-label="Hide history" data-tip="Hide history (⌘B)" data-tip-left>
+          <SidebarIcon />
+        </button>
         <h2 className="h2">History</h2>
         <div className="seg" role="radiogroup" aria-label="Selection mode">
           {(["single", "range", "all"] as HistoryMode[]).map((m) => (

@@ -232,6 +232,14 @@ body.resizing-y, body.resizing-y * { cursor: row-resize !important; user-select:
 
 /* history */
 .history { padding-bottom: 12px; }
+.history .panehead { padding-left: 8px; }
+.history .panehead .h2 { flex: 1 1 auto; }
+.history .iconbtn { width: 28px; height: 28px; }
+.history .left-expand { display: none; margin: 10px auto 0; }
+.left-collapsed .stage { grid-template-columns: 44px 10px minmax(320px, 1fr) 10px var(--right-w, 300px); }
+.left-collapsed .history + .splitter { pointer-events: none; }
+.left-collapsed .history > :not(.left-expand) { display: none; }
+.left-collapsed .history .left-expand { display: inline-grid; }
 .commits { flex: 1 1 auto; overflow: auto; padding: 2px 0 8px; position: relative; }
 .cm { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 10px; width: calc(100% - 16px); margin: 0 8px; padding: 9px 10px; border: 0; border-radius: 10px; background: none; text-align: left; cursor: pointer; color: var(--text); }
 .cm:hover { background: var(--pane2); }

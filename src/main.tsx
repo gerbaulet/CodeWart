@@ -7,9 +7,10 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "./styles.css";
 import App from "./App";
-import { initPaneSizes } from "./components/Splitter";
+import { initLeftPane, initPaneSizes } from "./components/Splitter";
 
 initPaneSizes();
+initLeftPane();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
