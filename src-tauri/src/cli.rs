@@ -1,5 +1,5 @@
 //! Install the `wart` command-line launcher from inside the app, pointing at
-//! wherever this copy of Codewart lives. Works for any install location, so a
+//! wherever this copy of CodeWart lives. Works for any install location, so a
 //! downloaded build gets `wart .` without the source repo.
 
 use crate::actions::find_in_path;
@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 const NAMES: &[&str] = &["wart", "codewart"];
-const MARKER: &str = "Codewart launcher";
+const MARKER: &str = "CodeWart launcher";
 
 #[cfg(unix)]
 const TEMPLATE: &str = include_str!("../../scripts/wart");
@@ -31,7 +31,8 @@ fn path_dirs() -> Vec<PathBuf> {
 
 fn ours(p: &Path) -> bool {
     std::fs::read_to_string(p)
-        .map(|s| s.contains(MARKER))
+        // Case-insensitive: launchers installed before the rename say "Codewart launcher".
+        .map(|s| s.to_lowercase().contains(&MARKER.to_lowercase()))
         .unwrap_or(false)
 }
 
@@ -129,7 +130,7 @@ pub fn install() -> Result<CliStatus, String> {
         if target.exists() && !ours(&target) {
             if *name == "wart" {
                 return Err(format!(
-                    "{} already exists and is not a Codewart launcher",
+                    "{} already exists and is not a CodeWart launcher",
                     target.display()
                 ));
             }

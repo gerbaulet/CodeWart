@@ -1,13 +1,13 @@
-# Builds Codewart installers for macOS (universal), Linux and Windows, attaches
+# Builds CodeWart installers for macOS (universal), Linux and Windows, attaches
 # them to a GitHub release and publishes it once every platform succeeded.
 # Trigger: push a tag like v0.1.0 (`make release`). Running it manually from
 # the Actions tab only builds (installers are kept as workflow artifacts).
 #
 # Each release also gets copies under stable names, so these links always point
 # at the newest version (the landing page in site/ uses them):
-#   https://github.com/<owner>/<repo>/releases/latest/download/Codewart-macos-universal.dmg
-#   …/Codewart-windows-x64-setup.exe, Codewart-windows-x64.msi,
-#   …/Codewart-linux-amd64.AppImage, Codewart-linux-amd64.deb, Codewart-linux-x86_64.rpm
+#   https://github.com/<owner>/<repo>/releases/latest/download/CodeWart-macos-universal.dmg
+#   …/CodeWart-windows-x64-setup.exe, CodeWart-windows-x64.msi,
+#   …/CodeWart-linux-amd64.AppImage, CodeWart-linux-amd64.deb, CodeWart-linux-x86_64.rpm
 #
 # macOS signing / notarization (optional, recommended for distribution):
 # add these repository secrets and the build is signed and notarized:
@@ -92,7 +92,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          releaseName: Codewart ${{ github.ref_name }}
+          releaseName: CodeWart ${{ github.ref_name }}
           releaseBody: |
             Install the app, open it once and click **Install `wart`** in the top bar
             (or run `make install-cli` from a checkout). Then run `wart .` in any repo.
@@ -131,12 +131,12 @@ jobs:
           gh release download "$TAG" -p '*.dmg' -p '*.msi' -p '*-setup.exe' -p '*.AppImage' -p '*.deb' -p '*.rpm'
           ls -l
           copy() { f=$(ls $1 2>/dev/null | head -1); if [ -n "$f" ]; then cp "$f" "../stable/$2"; else echo "::warning::no asset matching $1"; fi; }
-          copy '*universal.dmg'  Codewart-macos-universal.dmg
-          copy '*x64-setup.exe'  Codewart-windows-x64-setup.exe
-          copy '*x64*.msi'       Codewart-windows-x64.msi
-          copy '*.AppImage'      Codewart-linux-amd64.AppImage
-          copy '*amd64.deb'      Codewart-linux-amd64.deb
-          copy '*.rpm'           Codewart-linux-x86_64.rpm
+          copy '*universal.dmg'  CodeWart-macos-universal.dmg
+          copy '*x64-setup.exe'  CodeWart-windows-x64-setup.exe
+          copy '*x64*.msi'       CodeWart-windows-x64.msi
+          copy '*.AppImage'      CodeWart-linux-amd64.AppImage
+          copy '*amd64.deb'      CodeWart-linux-amd64.deb
+          copy '*.rpm'           CodeWart-linux-x86_64.rpm
           cd ../stable && gh release upload "$TAG" --clobber ./*
 
       - name: Publish release

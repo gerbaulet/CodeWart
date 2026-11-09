@@ -1,15 +1,15 @@
 ---
 name: codewart-review
-description: Ask the user to review your code changes in Codewart and wait for their feedback, then address it. Use when the user asks you to get their review, "request a review in Codewart", "wait for my review", or to iterate on a task with review rounds; also at the end of a task when the user has asked to review your work before you continue.
+description: Ask the user to review your code changes in CodeWart and wait for their feedback, then address it. Use when the user asks you to get their review, "request a review in CodeWart", "wait for my review", or to iterate on a task with review rounds; also at the end of a task when the user has asked to review your work before you continue.
 ---
 
-# Review rounds with Codewart
+# Review rounds with CodeWart
 
-Codewart is the user's desktop app for reviewing agent-written code. `wart review` opens the current worktree there, shows the user that you are waiting, and blocks until they send a review. It then prints the review to stdout.
+CodeWart is the user's desktop app for reviewing agent-written code. `wart review` opens the current worktree there, shows the user that you are waiting, and blocks until they send a review. It then prints the review to stdout.
 
 ## Request a review
 
-1. Finish a coherent piece of work first. Uncommitted changes are fine: Codewart shows them.
+1. Finish a coherent piece of work first. Uncommitted changes are fine: CodeWart shows them.
 2. From the repository or worktree you changed, run (Bash tool, **with `timeout: 600000`**):
 
    ```sh
@@ -21,7 +21,7 @@ Codewart is the user's desktop app for reviewing agent-written code. `wart revie
 3. Read the exit code:
    - **0**: the review is on stdout. Go to *Handle the review*.
    - **3**: no review yet (the Bash tool can't wait longer than 10 minutes). Run **the exact same command again** right away. Keep going until you get exit 0. Don't end your turn or ask the user while waiting; they are reviewing.
-   - **1** or `command not found`: Codewart or its `wart` command isn't installed. Tell the user to install the app and click **Install `wart`** in its top bar, then stop.
+   - **1** or `command not found`: CodeWart or its `wart` command isn't installed. Tell the user to install the app and click **Install `wart`** in its top bar, then stop.
 
 ## Handle the review
 

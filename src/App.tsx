@@ -77,7 +77,7 @@ function TitleStrip() {
     <div className="titlestrip" data-tauri-drag-region>
       <div className="apptitle" data-tauri-drag-region>
         <Logo size={15} />
-        codewart
+        CodeWart
         {version && <span>{version}</span>}
       </div>
     </div>
@@ -218,8 +218,10 @@ export default function App() {
       if (known) return; // the agent re-ran after --timeout: same request
       setActiveId((a) => a ?? id);
       const t = tabsRef.current.find((x) => tabId(x.project.id, x.worktree) === id);
-      toast(`Review requested${t ? ` for ${t.project.name}` : ""}`);
-      void api.requestAttention().catch(() => {});
+      const where = t ? `${t.project.name} · ${groupOf(t.project, t.worktree).label}` : r.path;
+      toast(`Review requested for ${where}`);
+      const body = r.message?.trim() ? `${where}\n${r.message.trim()}` : `${where}: an agent is waiting for your review`;
+      void api.reviewAlert("Review requested", body).catch(() => {});
     },
     [openRepo, toast],
   );
@@ -401,7 +403,7 @@ export default function App() {
 
   const active = infos.find((t) => t.id === activeId) ?? null;
   useEffect(() => {
-    document.title = active ? `${active.project.name} · ${active.group.label} — Codewart` : "Codewart";
+    document.title = active ? `${active.project.name} · ${active.group.label} — CodeWart` : "CodeWart";
   }, [active]);
 
   return (
@@ -453,7 +455,7 @@ export default function App() {
             </div>
             <div className="big">Review what your agents wrote</div>
             <p style={{ margin: "0 0 20px" }}>
-              Open a git repository, any of its worktrees, or a folder holding several repos. Codewart finds the main
+              Open a git repository, any of its worktrees, or a folder holding several repos. CodeWart finds the main
               checkout and all sibling worktrees automatically.
             </p>
             <button className="btn pri" onClick={pickFolder}>

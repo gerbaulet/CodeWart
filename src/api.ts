@@ -19,7 +19,8 @@ export const api = {
   launchReview: () => invoke<ReviewRequest | null>("launch_review"),
   reviewWaiting: (reply: string) => invoke<boolean>("review_waiting", { reply }),
   writeReviewReply: (reply: string, text: string) => invoke<void>("write_review_reply", { reply, text }),
-  requestAttention: () => invoke<void>("request_attention"),
+  /** Bounce the Dock icon and notify, unless CodeWart is already in front. */
+  reviewAlert: (title: string, body: string) => invoke<boolean>("review_alert", { title, body }),
   discover: (path: string) => invoke<Discovery>("discover", { path }),
   openProject: (path: string) => invoke<Project>("open_project", { path }),
   cliStatus: () => invoke<CliStatus>("cli_status"),

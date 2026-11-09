@@ -79,12 +79,23 @@ fn write_review_reply(reply: String, text: String) -> Result<(), String> {
     review::write_reply(&reply, &text)
 }
 
-/// Bounce the Dock icon / flash the taskbar without stealing focus.
+/// Get the user's attention for a review request without stealing focus:
+/// when the window isn't focused, the Dock icon bounces until CodeWart is
+/// activated (taskbar flashes on Windows / Linux) and a system notification
+/// is shown. Returns whether it alerted (false = the user is already here).
 #[tauri::command]
-fn request_attention(app: tauri::AppHandle) {
-    if let Some(w) = app.get_webview_window("main") {
-        let _ = w.request_user_attention(Some(tauri::UserAttentionType::Informational));
+fn review_alert(app: tauri::AppHandle, title: String, body: String) -> bool {
+    use tauri_plugin_notification::NotificationExt;
+    let Some(w) = app.get_webview_window("main") else {
+        return false;
+    };
+    let visible = w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false);
+    if visible && w.is_focused().unwrap_or(false) {
+        return false;
     }
+    let _ = w.request_user_attention(Some(tauri::UserAttentionType::Critical));
+    let _ = app.notification().builder().title(title).body(body).show();
+    true
 }
 
 #[tauri::command]
@@ -205,7 +216,7 @@ pub fn run() {
         return;
     }
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("codewart {}\n\nUsage: wart [PATH...]   (or codewart [PATH...])\n\nOpens the git project, worktree, or folder of repositories at PATH\n(default: current directory).\nIf codewart is already running the project opens as a new tab.\n\n       wart review [-m MESSAGE] [--timeout SECS] [PATH]\n\nAsks for a review of the worktree at PATH in Codewart and waits; prints the\nreview when you send it (exit 3 if --timeout passes first).\n\n       wart agent\n\nGuide for coding agents: what Codewart is for and how to use it.\n\nEnvironment:\n  CODEWART_EDITOR    editor command (default: first of cursor, code, zed, subl …)\n  CODEWART_TERMINAL  terminal app/command for \"open in terminal\"", env!("CARGO_PKG_VERSION"));
+        println!("CodeWart {}\n\nUsage: wart [PATH...]   (or codewart [PATH...])\n\nOpens the git project, worktree, or folder of repositories at PATH\n(default: current directory).\nIf CodeWart is already running the project opens as a new tab.\n\n       wart review [-m MESSAGE] [--timeout SECS] [PATH]\n\nAsks for a review of the worktree at PATH in CodeWart and waits; prints the\nreview when you send it (exit 3 if --timeout passes first).\n\n       wart agent\n\nGuide for coding agents: what CodeWart is for and how to use it.\n\nEnvironment:\n  CODEWART_EDITOR    editor command (default: first of cursor, code, zed, subl …)\n  CODEWART_TERMINAL  terminal app/command for \"open in terminal\"", env!("CARGO_PKG_VERSION"));
         return;
     }
     if std::env::var_os("TERM").is_none() {
@@ -237,6 +248,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(LaunchPaths(Mutex::new(initial)))
         .manage(LaunchReview(Mutex::new(initial_review)))
         .invoke_handler(tauri::generate_handler![
@@ -244,7 +256,7 @@ pub fn run() {
             launch_review,
             review_waiting,
             write_review_reply,
-            request_attention,
+            review_alert,
             discover,
             open_project,
             cli_status,

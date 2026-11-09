@@ -295,10 +295,10 @@ fn discovers_single_repo_and_folder_of_repos() {
 #[cfg(unix)]
 #[test]
 fn launcher_script_is_valid_and_points_at_the_app() {
-    let s = crate::cli::script_for_test(Path::new("/Apps/Codewart.app/Contents/MacOS/codewart"));
-    assert!(s.contains("Codewart launcher"));
+    let s = crate::cli::script_for_test(Path::new("/Apps/CodeWart.app/Contents/MacOS/codewart"));
+    assert!(s.contains("CodeWart launcher"));
     assert!(
-        s.contains("CODEWART_BIN=\"${CODEWART_BIN:-/Apps/Codewart.app/Contents/MacOS/codewart}\"")
+        s.contains("CODEWART_BIN=\"${CODEWART_BIN:-/Apps/CodeWart.app/Contents/MacOS/codewart}\"")
     );
     let path = std::env::temp_dir().join(format!("codewart-launcher-{}", std::process::id()));
     std::fs::write(&path, &s).unwrap();

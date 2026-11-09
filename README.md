@@ -1,4 +1,4 @@
-# Codewart
+# CodeWart
 
 A desktop helper for reviewing code written by coding agents. Point it at a repo or any of its worktrees, step through what the agent did commit by commit, follow new functions through a call-chain diagram, and send review comments straight back to the agent session.
 
@@ -17,32 +17,32 @@ Then, from any project root, worktree, or folder of repos:
 
 ```sh
 wart .              # opens the current directory
-wart ../other       # if Codewart is already running, opens as a new tab
+wart ../other       # if CodeWart is already running, opens as a new tab
 ```
 
 `codewart` is installed as an alias of `wart`.
 
-## Using Codewart with coding agents
+## Using CodeWart with coding agents
 
-Codewart works with any coding agent that edits a git checkout (Claude Code, Codex, Aider, Gemini CLI, Cursor's agent …). Agents learn how to use it from `wart agent`, which prints [`docs/agents.md`](docs/agents.md).
+CodeWart works with any coding agent that edits a git checkout (Claude Code, Codex, Aider, Gemini CLI, Cursor's agent …). Agents learn how to use it from `wart agent`, which prints [`docs/agents.md`](docs/agents.md).
 
 ### Recommended setup
 
-1. **One worktree per agent task.** `git worktree add ../api.login -b feat/login`, then start the agent there. Codewart groups tabs by branch, so related repos on the same feature branch sit together, and you can review one agent while others keep working.
-2. **Open it with Follow agent on.** Run `wart .` in the worktree. Codewart jumps to each new commit or uncommitted edit as the agent makes it.
+1. **One worktree per agent task.** `git worktree add ../api.login -b feat/login`, then start the agent there. CodeWart groups tabs by branch, so related repos on the same feature branch sit together, and you can review one agent while others keep working.
+2. **Open it with Follow agent on.** Run `wart .` in the worktree. CodeWart jumps to each new commit or uncommitted edit as the agent makes it.
 3. **Review in rounds:** read the diff (hide tests and noise with the filters), check the call chain for new functions and who calls them, and comment on lines, functions or whole files.
 4. **Hand the review back.** Either let the agent ask for it (below), use **Send to session** (agent running in tmux, WezTerm or kitty), or **Copy** and paste. Every handed-over review is archived as a numbered session in the review pane.
 
 ### Let the agent ask for your review
 
-`wart review` blocks until you send your review in Codewart, then prints it, so the agent can work in review rounds without any terminal integration.
+`wart review` blocks until you send your review in CodeWart, then prints it, so the agent can work in review rounds without any terminal integration.
 
 **Claude Code: install the skill.** `make install` (or `make install-skill`) copies [`skills/codewart-review`](skills/codewart-review/SKILL.md) to `~/.claude/skills`. A shortened version of what it tells Claude:
 
 ```markdown
 ---
 name: codewart-review
-description: Ask the user to review your code changes in Codewart and wait for their feedback,
+description: Ask the user to review your code changes in CodeWart and wait for their feedback,
   then address it. Use when the user asks for their review or for review rounds.
 ---
 
@@ -56,8 +56,8 @@ description: Ask the user to review your code changes in Codewart and wait for t
 
 Then prompt it like this:
 
-- *"Implement token rotation in `src/session.ts`, then get my review in Codewart and address it."*
-- *"Fix the flaky login test. Work in review rounds with me in Codewart until I approve."*
+- *"Implement token rotation in `src/session.ts`, then get my review in CodeWart and address it."*
+- *"Fix the flaky login test. Work in review rounds with me in CodeWart until I approve."*
 - *"Refactor the router; ask for my review after each step."*
 
 **Other agents: add a few lines to the repo's `AGENTS.md`** (or `CLAUDE.md`, `GEMINI.md`, `CONVENTIONS.md` …):
@@ -83,12 +83,12 @@ Tauri builds native installers per OS (it can't cross-compile):
 
 | Command | Output |
 | --- | --- |
-| `make dist` on macOS | `release/Codewart_<v>_universal.dmg` + `.app.zip` (Apple Silicon + Intel) |
+| `make dist` on macOS | `release/CodeWart_<v>_universal.dmg` + `.app.zip` (Apple Silicon + Intel) |
 | `make dist` on Linux | `.deb`, `.AppImage`, `.rpm` |
 | `make dist` on Windows | `.msi` and setup `.exe` |
 | `make release` | tags `v<version>` and pushes; `.github/workflows/release.yml` builds all three platforms, attaches them to a GitHub release and publishes it once every platform succeeded |
 
-Every release also carries copies under stable names, so `https://github.com/ivostrugar/Codewart/releases/latest/download/Codewart-macos-universal.dmg` (and the `-windows-x64-setup.exe`, `-windows-x64.msi`, `-linux-amd64.AppImage`, `-linux-amd64.deb`, `-linux-x86_64.rpm` variants) always serves the newest version.
+Every release also carries copies under stable names, so `https://github.com/ivostrugar/CodeWart/releases/latest/download/CodeWart-macos-universal.dmg` (and the `-windows-x64-setup.exe`, `-windows-x64.msi`, `-linux-amd64.AppImage`, `-linux-amd64.deb`, `-linux-x86_64.rpm` variants) always serves the newest version.
 
 ### Landing page
 
@@ -99,7 +99,7 @@ On the other machine, install the app, open it once and click **Install `wart`**
 * macOS/Linux: into `~/.local/bin`, `~/bin`, `/usr/local/bin` or `/opt/homebrew/bin`, whichever is on `PATH` and writable
 * Windows: `wart.cmd` into `%LOCALAPPDATA%\Microsoft\WindowsApps`
 
-**macOS Gatekeeper:** unsigned builds are blocked on other Macs ("app is damaged / can't be opened"). Either right-click → Open once, or run `xattr -dr com.apple.quarantine /Applications/Codewart.app`. For proper distribution, add the Apple signing secrets listed in `release.yml` and CI signs and notarizes the build.
+**macOS Gatekeeper:** unsigned builds are blocked on other Macs ("app is damaged / can't be opened"). Either right-click → Open once, or run `xattr -dr com.apple.quarantine /Applications/CodeWart.app`. For proper distribution, add the Apple signing secrets listed in `release.yml` and CI signs and notarizes the build.
 
 **Linux:** the app needs WebKitGTK 4.1 (`libwebkit2gtk-4.1-0`), which the `.deb` declares.
 
@@ -118,7 +118,7 @@ Run `make` to see every command.
 
 ### Project identification
 
-Open a project from its main checkout or from any linked worktree and you get the same tab: Codewart resolves the main worktree via `git worktree list` and lists all its siblings in the dropdown. The default branch comes from `origin/HEAD`, falling back to `main`, `master`, `trunk` or `develop`.
+Open a project from its main checkout or from any linked worktree and you get the same tab: CodeWart resolves the main worktree via `git worktree list` and lists all its siblings in the dropdown. The default branch comes from `origin/HEAD`, falling back to `main`, `master`, `trunk` or `develop`.
 
 ### Multi-repo folders
 
@@ -147,7 +147,7 @@ Extraction is heuristic and has no per-language dependencies: comments and strin
 Click any line in the diff to comment; drag over line numbers or shift-click for a range. Click a comment (or its line) again to edit it. Comments collect in the review pane together with free-form markdown. Then either:
 
 * **Copy**: the compiled markdown (file:line, optional code snippet, comment) goes to the clipboard, ready to paste anywhere.
-* **Send to session**: Codewart finds terminal panes whose working directory is inside the worktree in **tmux**, **WezTerm** or **kitty** (with `allow_remote_control`), puts agent panes (Claude Code, Codex, Aider, Gemini…) first, and pastes the review there. "Press Enter after send" submits it.
+* **Send to session**: CodeWart finds terminal panes whose working directory is inside the worktree in **tmux**, **WezTerm** or **kitty** (with `allow_remote_control`), puts agent panes (Claude Code, Codex, Aider, Gemini…) first, and pastes the review there. "Press Enter after send" submits it.
 
 ### Reviews requested by the agent (`wart review`)
 
@@ -157,17 +157,17 @@ An agent can ask for your review and wait for it, in any terminal:
 wart review -m "Added token rotation; check the expiry math" [--timeout SECS] [PATH]
 ```
 
-Codewart opens the worktree (without stealing focus; the Dock icon bounces), marks its tab with a pulsing dot and shows the agent's message above the review. **Send to agent** hands the review to the waiting command, which prints it and exits 0. The review is archived as a numbered session. **Approve, no changes** and **dismiss** release the agent with `APPROVED: …` / `DISMISSED: …`. With `--timeout` the command exits 3 if nothing arrived yet; running it again keeps waiting on the same request.
+CodeWart opens the worktree (without stealing focus; the Dock icon bounces), marks its tab with a pulsing dot and shows the agent's message above the review. **Send to agent** hands the review to the waiting command, which prints it and exits 0. The review is archived as a numbered session. **Approve, no changes** and **dismiss** release the agent with `APPROVED: …` / `DISMISSED: …`. With `--timeout` the command exits 3 if nothing arrived yet; running it again keeps waiting on the same request.
 
-**Claude Code skill:** `make install` (or `make install-skill`) installs `skills/codewart-review` into `~/.claude/skills`. It teaches Claude to run `wart review` when you ask for a review (or review rounds), to re-run it past the Bash tool's 10-minute limit, and to address every comment. Try: *"implement X, then get my review in Codewart"*.
+**Claude Code skill:** `make install` (or `make install-skill`) installs `skills/codewart-review` into `~/.claude/skills`. It teaches Claude to run `wart review` when you ask for a review (or review rounds), to re-run it past the Bash tool's 10-minute limit, and to address every comment. Try: *"implement X, then get my review in CodeWart"*.
 
-**Any agent:** `wart agent` prints [`docs/agents.md`](docs/agents.md), a guide for coding agents (what Codewart is for, the commands, the review format and an AGENTS.md snippet). `wart --help` points to it, and the landing page serves the same file as `llms.txt`.
+**Any agent:** `wart agent` prints [`docs/agents.md`](docs/agents.md), a guide for coding agents (what CodeWart is for, the commands, the review format and an AGENTS.md snippet). `wart --help` points to it, and the landing page serves the same file as `llms.txt`.
 
 Under the hood the request and reply go through `$TMPDIR/codewart-reviews/review-<id>.md` (one per worktree). `wart review` is available with the macOS/Linux launcher.
 
 ### Follow agent
 
-With **Follow agent** on, Codewart polls the worktree (HEAD + `git status` + file mtimes) every 1.5 s. It reloads when anything changes and jumps to the newest commit or the uncommitted work.
+With **Follow agent** on, CodeWart polls the worktree (HEAD + `git status` + file mtimes) every 1.5 s. It reloads when anything changes and jumps to the newest commit or the uncommitted work.
 
 ## Keyboard
 

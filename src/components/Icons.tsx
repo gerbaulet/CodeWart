@@ -18,7 +18,7 @@ function base({ size = 16, ...rest }: P) {
   };
 }
 
-/** Codewart owl signet. Takes the text colour; the eyes are knocked out so the
+/** CodeWart owl signet. Takes the text colour; the eyes are knocked out so the
  *  background shows through, and the folded "page" uses --logo-fold. */
 export function Logo({ size = 20 }: { size?: number }) {
   const id = "cw-logo" + useId().replace(/:/g, "");

@@ -1,16 +1,16 @@
 #!/bin/sh
-# wart — Codewart launcher. Opens a project, worktree or folder of repos.
+# wart — CodeWart launcher. Opens a project, worktree or folder of repos.
 #
 #   wart              open the current directory
 #   wart PATH...      open one or more repos / worktrees / folders of repos
 #   wart review [-m MESSAGE] [--timeout SECS] [PATH]
 #                     ask for a review of the worktree at PATH (default: .) in
-#                     Codewart and wait for it; prints the review when it is sent.
+#                     CodeWart and wait for it; prints the review when it is sent.
 #                     Exit 0: review received · 3: --timeout passed, still waiting
 #                     (run it again to keep waiting) · 1: error.
-#   wart agent        guide for coding agents (what Codewart is for, how to use it)
+#   wart agent        guide for coding agents (what CodeWart is for, how to use it)
 #
-# If Codewart is already running, projects open as new tabs there.
+# If CodeWart is already running, projects open as new tabs there.
 # @CODEWART_BIN@
 set -e
 
@@ -21,7 +21,9 @@ esac
 
 find_bin() {
   if [ -n "$CODEWART_BIN" ] && [ -x "$CODEWART_BIN" ]; then echo "$CODEWART_BIN"; return; fi
-  for app in "$CODEWART_APP" "/Applications/Codewart.app" "$HOME/Applications/Codewart.app"; do
+  # Codewart.app: installs from before the rename (matters on case-sensitive volumes).
+  for app in "$CODEWART_APP" "/Applications/CodeWart.app" "$HOME/Applications/CodeWart.app" \
+    "/Applications/Codewart.app" "$HOME/Applications/Codewart.app"; do
     [ -n "$app" ] && [ -d "$app/Contents/MacOS" ] || continue
     for b in "$app/Contents/MacOS/"*; do
       [ -x "$b" ] && { echo "$b"; return; }
@@ -34,7 +36,7 @@ find_bin() {
 
 BIN="$(find_bin)"
 if [ -z "$BIN" ]; then
-  echo "wart: Codewart app not found. Install it, or set CODEWART_APP / CODEWART_BIN." >&2
+  echo "wart: CodeWart app not found. Install it, or set CODEWART_APP / CODEWART_BIN." >&2
   exit 1
 fi
 
@@ -78,14 +80,14 @@ if [ "$1" = "review" ]; then
 
   if [ ! -f "$reply" ]; then
     CODEWART_CWD="$PWD" nohup "$BIN" "--review-reply=$reply" "--review-message=$msg" "$top" >/dev/null 2>&1 &
-    echo "Waiting for your review in Codewart ($top)…" >&2
+    echo "Waiting for your review in CodeWart ($top)…" >&2
   fi
 
   start=$(date +%s)
   while [ ! -f "$reply" ]; do
     if [ "$timeout" -gt 0 ] && [ $(( $(date +%s) - start )) -ge "$timeout" ]; then
-      trap - EXIT # keep the request alive in Codewart until the next run
-      echo "No review yet: the request is still open in Codewart. Run the same command again to keep waiting."
+      trap - EXIT # keep the request alive in CodeWart until the next run
+      echo "No review yet: the request is still open in CodeWart. Run the same command again to keep waiting."
       exit 3
     fi
     sleep 1

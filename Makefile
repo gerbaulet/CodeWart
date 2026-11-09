@@ -1,4 +1,4 @@
-# Codewart — streamlined commands. Run `make` to list them.
+# CodeWart — streamlined commands. Run `make` to list them.
 
 SHELL := /bin/bash
 
@@ -133,12 +133,12 @@ ifeq ($(UNAME_S),Darwin)
 	$(TAURI) build --target universal-apple-darwin --bundles app
 	rm -rf release
 	mkdir -p release/dmg-root
-	cp -R src-tauri/target/universal-apple-darwin/release/bundle/macos/Codewart.app release/dmg-root/
+	cp -R src-tauri/target/universal-apple-darwin/release/bundle/macos/CodeWart.app release/dmg-root/
 	ln -s /Applications release/dmg-root/Applications
 	# Plain hdiutil DMG: no Finder scripting, so it works headless and in CI.
-	hdiutil create -quiet -volname Codewart -srcfolder release/dmg-root -fs HFS+ -format UDZO -ov "release/Codewart_$$(node -p "require('./package.json').version")_universal.dmg"
+	hdiutil create -quiet -volname CodeWart -srcfolder release/dmg-root -fs HFS+ -format UDZO -ov "release/CodeWart_$$(node -p "require('./package.json').version")_universal.dmg"
 	rm -rf release/dmg-root
-	cd src-tauri/target/universal-apple-darwin/release/bundle/macos && zip -qry $(CURDIR)/release/Codewart_macos_universal.app.zip Codewart.app
+	cd src-tauri/target/universal-apple-darwin/release/bundle/macos && zip -qry $(CURDIR)/release/CodeWart_macos_universal.app.zip CodeWart.app
 else
 	$(TAURI) build
 	rm -rf release
@@ -151,7 +151,7 @@ endif
 .PHONY: release
 release: ## Tag the package.json version and push it; CI builds all platforms
 	@v=$$(node -p "require('./package.json').version"); \
-	git tag -a "v$$v" -m "Codewart v$$v" && git push origin "v$$v" && \
+	git tag -a "v$$v" -m "CodeWart v$$v" && git push origin "v$$v" && \
 	echo "✓ pushed v$$v: the Release workflow builds macOS, Linux and Windows installers"
 
 .PHONY: icons
@@ -167,9 +167,9 @@ install: build-app install-app install-cli install-skill ## Build and install th
 .PHONY: install-app
 install-app: ## Install the built app (macOS: $(APP_DIR), Linux: $(BIN_DIR))
 ifeq ($(UNAME_S),Darwin)
-	rm -rf "$(APP_DIR)/Codewart.app"
-	cp -R "$(BUNDLE)/macos/Codewart.app" "$(APP_DIR)/"
-	@echo "✓ installed $(APP_DIR)/Codewart.app"
+	rm -rf "$(APP_DIR)/CodeWart.app" "$(APP_DIR)/Codewart.app"
+	cp -R "$(BUNDLE)/macos/CodeWart.app" "$(APP_DIR)/"
+	@echo "✓ installed $(APP_DIR)/CodeWart.app"
 else
 	mkdir -p "$(BIN_DIR)"
 	install -m 755 src-tauri/target/release/codewart "$(BIN_DIR)/codewart-app"
@@ -197,7 +197,7 @@ uninstall: ## Remove the app and CLI
 	rm -f "$(BIN_DIR)/wart" "$(BIN_DIR)/codewart" "$(BIN_DIR)/codewart-app"
 	rm -rf "$(SKILL_DIR)/codewart-review"
 ifeq ($(UNAME_S),Darwin)
-	rm -rf "$(APP_DIR)/Codewart.app"
+	rm -rf "$(APP_DIR)/CodeWart.app" "$(APP_DIR)/Codewart.app"
 endif
 
 ##@ Housekeeping
