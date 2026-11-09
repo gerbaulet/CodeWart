@@ -12,8 +12,19 @@ import { highlightLine } from "../highlight";
 import type { DiffLine, ReviewComment } from "../types";
 import { languageOf, newId } from "../util";
 
+/** Expand controls on a hunk header: unchanged lines hidden above it. */
+export interface ExpandInfo {
+  gap: number;
+  /** Hidden lines, or null when unknown (end of file before it's loaded). */
+  hidden: number | null;
+  /** Reveal lines downward, right after the previous hunk. */
+  canDown: boolean;
+  /** Reveal lines upward, right before the next hunk. */
+  canUp: boolean;
+}
+
 /** A diff line, or a hunk header separating non-contiguous parts. */
-export type Row = DiffLine | { kind: "hunk"; text: string };
+export type Row = DiffLine | { kind: "hunk"; text: string; expand?: ExpandInfo };
 
 interface Draft {
   side: "new" | "old";
@@ -36,6 +47,8 @@ interface Props {
   /** "side:line" to highlight after a jump. */
   flash?: string | null;
   sendLabel?: string;
+  /** Unfold hidden unchanged lines (diff view); without it hunk headers are plain. */
+  onExpand?: (gap: number, dir: "up" | "down" | "all") => void;
 }
 
 function sideOf(l: DiffLine): { side: "new" | "old"; n: number } {
@@ -59,7 +72,7 @@ export function submitOnEnter(e: ReactKeyboardEvent<HTMLTextAreaElement>, submit
   }
 }
 
-export const CodeLines = memo(function CodeLines({ path, rows, comments, onAddComment, onRemoveComment, onUpdateComment, flash, sendLabel }: Props) {
+export const CodeLines = memo(function CodeLines({ path, rows, comments, onAddComment, onRemoveComment, onUpdateComment, flash, sendLabel, onExpand }: Props) {
   const lang = languageOf(path);
   const [draft, setDraft] = useState<Draft | null>(null);
   /** Id of a saved comment being edited. */
@@ -193,6 +206,8 @@ export const CodeLines = memo(function CodeLines({ path, rows, comments, onAddCo
     <div className="lines">
       {rows.map((r, i) => {
         if (r.kind === "hunk") {
+          const x = onExpand ? r.expand : undefined;
+          if (x) return <ExpandRow key={i} text={r.text} x={x} onExpand={onExpand!} />;
           return (
             <div className="ln hunk" key={i}>
               <span className="n" />
@@ -302,6 +317,36 @@ export const CodeLines = memo(function CodeLines({ path, rows, comments, onAddCo
     </div>
   );
 });
+
+/** A hunk header with GitHub-style buttons to unfold the unchanged lines above it. */
+function ExpandRow({ text, x, onExpand }: { text: string; x: ExpandInfo; onExpand: NonNullable<Props["onExpand"]> }) {
+  const STEP = 20;
+  const small = x.hidden != null && x.hidden <= STEP;
+  const btn = (dir: "up" | "down" | "all", label: string, glyph: string) => (
+    <button className="xbtn" onClick={() => onExpand(x.gap, dir)} title={label} aria-label={label}>
+      {glyph}
+    </button>
+  );
+  const lines = x.hidden == null ? "" : ` ${x.hidden} line${x.hidden === 1 ? "" : "s"}`;
+  return (
+    <div className="ln hunk expand">
+      <span className="xbtns">
+        {small
+          ? btn("all", `Show${lines}`, "↕")
+          : (
+            <>
+              {x.canDown && btn("down", `Show ${STEP} more lines below the previous change`, "↓")}
+              {x.canUp && btn("up", `Show ${STEP} more lines above this change`, "↑")}
+            </>
+          )}
+      </span>
+      <code>
+        {text}
+        {x.hidden != null && <span className="xhid">{text ? " · " : ""}{x.hidden} unchanged line{x.hidden === 1 ? "" : "s"} hidden</span>}
+      </code>
+    </div>
+  );
+}
 
 /**
  * Comments on a file as a whole, shown under its header in the diff, plus the

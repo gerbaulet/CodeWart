@@ -387,6 +387,10 @@ export const Workspace = memo(function Workspace({
     },
     [toast],
   );
+  const loadFile = useCallback(
+    (path: string) => api.readFile(worktree, diff?.newRev ?? null, path).catch(() => null),
+    [worktree, diff?.newRev],
+  );
   const openInEditor = useCallback((file?: string, line?: number) => run(api.openInEditor(worktree, file, line)), [run, worktree]);
 
   const changeView = (v: View) => {
@@ -572,6 +576,7 @@ export const Workspace = memo(function Workspace({
                     onOpenInEditor={openInEditor}
                     sendLabel={`${comments.length} in batch`}
                     scrollRef={diffScroller}
+                    loadFile={loadFile}
                   />
                 ) : null}
               </div>

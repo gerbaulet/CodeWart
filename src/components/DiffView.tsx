@@ -1,4 +1,5 @@
-import { memo, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { gapSize, gapsOf, rowsWithContext, unfoldGap, type Unfold } from "../expand";
 import type { FileDiff, ReviewComment } from "../types";
 import { TAG_LABEL, isFileComment, splitPath } from "../util";
 import { CodeLines, FileComments, type Row } from "./CodeLines";
@@ -23,11 +24,13 @@ interface Props {
   sendLabel: string;
   /** Receives the scroll container (for back navigation). */
   scrollRef?: MutableRefObject<HTMLDivElement | null>;
+  /** Full text of a file on the diff's new side (to unfold unchanged lines). */
+  loadFile: (path: string) => Promise<string | null>;
 }
 
 const NO_COMMENTS: ReviewComment[] = [];
 
-export function DiffView({ files, comments, onAddComment, onRemoveComment, onUpdateComment, target, onActiveFile, onOpenInEditor, sendLabel, scrollRef }: Props) {
+export function DiffView({ files, comments, onAddComment, onRemoveComment, onUpdateComment, target, onActiveFile, onOpenInEditor, sendLabel, scrollRef, loadFile }: Props) {
   const scroller = useRef<HTMLDivElement | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [flash, setFlash] = useState<string | null>(null);
@@ -130,6 +133,7 @@ export function DiffView({ files, comments, onAddComment, onRemoveComment, onUpd
           onUpdateComment={onUpdateComment}
           onOpenInEditor={onOpenInEditor}
           sendLabel={sendLabel}
+          loadFile={loadFile}
         />
       ))}
     </div>
@@ -147,6 +151,7 @@ interface BlockProps {
   onUpdateComment: (id: string, body: string) => void;
   onOpenInEditor: (path: string, line?: number) => void;
   sendLabel: string;
+  loadFile: (path: string) => Promise<string | null>;
 }
 
 const FileBlock = memo(function FileBlock({
@@ -160,11 +165,34 @@ const FileBlock = memo(function FileBlock({
   onUpdateComment,
   onOpenInEditor,
   sendLabel,
+  loadFile,
 }: BlockProps) {
   const { dir, name } = splitPath(file.path);
-  const rows = useMemo<Row[]>(
-    () => file.hunks.flatMap((h) => [{ kind: "hunk" as const, text: h.header }, ...h.lines]),
-    [file.hunks],
+  // Unfolded unchanged lines, GitHub-style. Reset when the diff itself changes.
+  const [unfold, setUnfold] = useState<Map<number, Unfold>>(() => new Map());
+  const [text, setText] = useState<string[] | null>(null);
+  // Diffs reload whenever the agent touches the worktree; only a real change to
+  // this file's hunks folds everything back.
+  const shape = file.hunks.map((h) => `${h.oldStart},${h.oldLines},${h.newStart},${h.newLines}`).join(" ");
+  useEffect(() => {
+    setUnfold(new Map());
+    setText(null);
+  }, [shape]);
+  const rows = useMemo<Row[]>(() => rowsWithContext(file.hunks, unfold, text), [file.hunks, unfold, text]);
+  const expandable = !file.binary && file.status !== "added" && file.status !== "deleted" && file.hunks.length > 0;
+  const onExpand = useCallback(
+    async (gap: number, dir: "up" | "down" | "all") => {
+      let lines = text;
+      if (!lines) {
+        const t = await loadFile(file.path);
+        if (t == null) return;
+        lines = t.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n");
+        setText(lines);
+      }
+      const size = gapSize(gapsOf(file.hunks)[gap], lines.length);
+      setUnfold((m) => new Map(m).set(gap, unfoldGap(m.get(gap), dir, size)));
+    },
+    [text, loadFile, file.path, file.hunks],
   );
   const firstChange = file.hunks.flatMap((h) => h.lines).find((l) => l.kind !== "ctx");
   const [composing, setComposing] = useState(false);
@@ -245,6 +273,7 @@ const FileBlock = memo(function FileBlock({
               onUpdateComment={onUpdateComment}
               flash={flash}
               sendLabel={sendLabel}
+              onExpand={expandable ? onExpand : undefined}
             />
           )}
           {file.truncated && file.hunks.length > 0 && <div className="dnote">Diff truncated — open the file to see the rest.</div>}

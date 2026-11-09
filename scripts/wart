@@ -8,13 +8,14 @@
 #                     Codewart and wait for it; prints the review when it is sent.
 #                     Exit 0: review received · 3: --timeout passed, still waiting
 #                     (run it again to keep waiting) · 1: error.
+#   wart agent        guide for coding agents (what Codewart is for, how to use it)
 #
 # If Codewart is already running, projects open as new tabs there.
 # @CODEWART_BIN@
 set -e
 
 case "$1" in
-  -h|--help|-V|--version|review) ;;
+  -h|--help|-V|--version|review|agent) ;;
   *) [ $# -eq 0 ] && set -- "$PWD" ;;
 esac
 
@@ -39,6 +40,7 @@ fi
 
 case "$1" in
   -h|--help|-V|--version) exec "$BIN" "$@" ;;
+  agent) exec "$BIN" --agent-help ;;
 esac
 
 # ---- wart review: request a review and wait for it --------------------------

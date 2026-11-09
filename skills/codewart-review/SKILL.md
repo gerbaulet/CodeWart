@@ -36,3 +36,5 @@ The output is one of:
   4. If the user asked for review rounds, request the next review the same way. Mention in `-m` which comments you addressed.
 
 Several reviews sent before you picked them up arrive together, separated by `---`. Handle all of them.
+
+`wart agent` prints the full reference (all commands, exit codes and the review format).

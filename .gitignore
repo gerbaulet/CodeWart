@@ -7,3 +7,4 @@ src-tauri/gen/schemas/
 .vite/
 release/
 assets/generated/
+site/llms.txt

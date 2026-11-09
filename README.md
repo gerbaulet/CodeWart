@@ -106,6 +106,8 @@ Codewart opens the worktree (without stealing focus; the Dock icon bounces), mar
 
 **Claude Code skill:** `make install` (or `make install-skill`) installs `skills/codewart-review` into `~/.claude/skills`. It teaches Claude to run `wart review` when you ask for a review (or review rounds), to re-run it past the Bash tool's 10-minute limit, and to address every comment. Try: *"implement X, then get my review in Codewart"*.
 
+**Any agent:** `wart agent` prints [`docs/agents.md`](docs/agents.md), a guide for coding agents (what Codewart is for, the commands, the review format and an AGENTS.md snippet). `wart --help` points to it, and the landing page serves the same file as `llms.txt`.
+
 Under the hood the request and reply go through `$TMPDIR/codewart-reviews/review-<id>.md` (one per worktree). `wart review` is available with the macOS/Linux launcher.
 
 ### Follow agent

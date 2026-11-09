@@ -130,6 +130,24 @@ async fn call_graph(
     blocking(move || callgraph::build(Path::new(&worktree), &selection, scope)).await
 }
 
+/// A file's full text at a revision (None = working tree), for expanding
+/// unchanged lines around diff hunks.
+#[tauri::command]
+async fn read_file(
+    worktree: String,
+    rev: Option<String>,
+    path: String,
+) -> Result<Option<String>, String> {
+    let inside = !Path::new(&path).is_absolute()
+        && !Path::new(&path)
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir));
+    if !inside {
+        return Err(format!("not a path inside the repository: {path}"));
+    }
+    blocking(move || Ok(git::read_at(Path::new(&worktree), rev.as_deref(), &path))).await
+}
+
 #[tauri::command]
 async fn fingerprint(worktree: String) -> Result<String, String> {
     blocking(move || git::fingerprint(Path::new(&worktree))).await
@@ -182,8 +200,12 @@ pub fn run() {
         println!("codewart {}", env!("CARGO_PKG_VERSION"));
         return;
     }
+    if args.iter().any(|a| a == "--agent-help") {
+        print!("{}", include_str!("../../docs/agents.md"));
+        return;
+    }
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("codewart {}\n\nUsage: wart [PATH...]   (or codewart [PATH...])\n\nOpens the git project, worktree, or folder of repositories at PATH\n(default: current directory).\nIf codewart is already running the project opens as a new tab.\n\n       wart review [-m MESSAGE] [--timeout SECS] [PATH]\n\nAsks for a review of the worktree at PATH in Codewart and waits; prints the\nreview when you send it (exit 3 if --timeout passes first).\n\nEnvironment:\n  CODEWART_EDITOR    editor command (default: first of cursor, code, zed, subl …)\n  CODEWART_TERMINAL  terminal app/command for \"open in terminal\"", env!("CARGO_PKG_VERSION"));
+        println!("codewart {}\n\nUsage: wart [PATH...]   (or codewart [PATH...])\n\nOpens the git project, worktree, or folder of repositories at PATH\n(default: current directory).\nIf codewart is already running the project opens as a new tab.\n\n       wart review [-m MESSAGE] [--timeout SECS] [PATH]\n\nAsks for a review of the worktree at PATH in Codewart and waits; prints the\nreview when you send it (exit 3 if --timeout passes first).\n\n       wart agent\n\nGuide for coding agents: what Codewart is for and how to use it.\n\nEnvironment:\n  CODEWART_EDITOR    editor command (default: first of cursor, code, zed, subl …)\n  CODEWART_TERMINAL  terminal app/command for \"open in terminal\"", env!("CARGO_PKG_VERSION"));
         return;
     }
     if std::env::var_os("TERM").is_none() {
@@ -231,6 +253,7 @@ pub fn run() {
             diff,
             call_graph,
             fingerprint,
+            read_file,
             pr_status,
             editor_info,
             open_in_editor,
