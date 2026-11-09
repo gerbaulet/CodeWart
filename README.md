@@ -31,7 +31,13 @@ Tauri builds native installers per OS (it can't cross-compile):
 | `make dist` on macOS | `release/Codewart_<v>_universal.dmg` + `.app.zip` (Apple Silicon + Intel) |
 | `make dist` on Linux | `.deb`, `.AppImage`, `.rpm` |
 | `make dist` on Windows | `.msi` and setup `.exe` |
-| `make release` | tags `v<version>` and pushes; `.github/workflows/release.yml` builds all three platforms and attaches them to a draft GitHub release |
+| `make release` | tags `v<version>` and pushes; `.github/workflows/release.yml` builds all three platforms, attaches them to a GitHub release and publishes it once every platform succeeded |
+
+Every release also carries copies under stable names, so `https://github.com/ivostrugar/Codewart/releases/latest/download/Codewart-macos-universal.dmg` (and the `-windows-x64-setup.exe`, `-windows-x64.msi`, `-linux-amd64.AppImage`, `-linux-amd64.deb`, `-linux-x86_64.rpm` variants) always serves the newest version.
+
+### Landing page
+
+`site/` is a static landing page with download buttons for those links. `.github/workflows/pages.yml` publishes it to GitHub Pages on every push to `main` that touches `site/` (one-time setup: **Settings → Pages → Source: GitHub Actions**). Preview it locally with `python3 -m http.server -d site`.
 
 On the other machine, install the app, open it once and click **Install `wart`** in the top bar. This writes a launcher that points at wherever the app is installed:
 
@@ -128,6 +134,7 @@ src-tauri/src/
   e2e_tests.rs            tests against a real temp repo with a worktree
 assets/brand/             logo, signet, wordmark, app icons (see its README)
 scripts/wart              CLI launcher (`wart`, alias `codewart`)
+site/                     landing page for GitHub Pages
 ```
 
 `make test` runs the Rust unit and end-to-end tests plus the TypeScript type-check. `make ci` also checks formatting, clippy and the production UI build.
