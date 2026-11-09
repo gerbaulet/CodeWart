@@ -40,6 +40,27 @@ pub fn lang_of(path: &str) -> Option<Lang> {
     })
 }
 
+/// Files whose functions can call each other: same extension, or extensions of
+/// one language family (`.ts` ↔ `.js`, `.c` ↔ `.h`, Kotlin ↔ Java …). Name-based
+/// resolution never links across families (a `.js` call to a `.rb` method).
+pub fn family(path: &str) -> String {
+    let ext = path
+        .rsplit('/')
+        .next()
+        .and_then(|f| f.rsplit_once('.'))
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    match ext.as_str() {
+        "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" | "mts" | "cts" | "vue" | "svelte" => {
+            "js".into()
+        }
+        "py" | "pyi" => "py".into(),
+        "c" | "h" | "cc" | "cpp" | "cxx" | "hpp" | "hh" | "m" | "mm" => "c".into(),
+        "java" | "kt" | "kts" | "scala" | "groovy" => "jvm".into(),
+        _ => ext,
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct FnDef {
     pub name: String,
@@ -1179,7 +1200,10 @@ pub fn build(dir: &Path, sel: &Selection, scope: Scope) -> Result<CallGraph, Str
     for (idx, new_body) in &added_candidates {
         let n = &mut nodes[*idx];
         if let Some(olds) = old_bodies.get(&n.name) {
-            if let Some((from, old_body)) = olds.iter().find(|(p, _)| *p != n.file) {
+            let fam = family(&n.file);
+            if let Some((from, old_body)) =
+                olds.iter().find(|(p, _)| *p != n.file && family(p) == fam)
+            {
                 n.moved_from = Some(from.clone());
                 n.status = if normalize_ws(old_body) == normalize_ws(new_body) {
                     "moved".into()
@@ -1256,6 +1280,7 @@ pub fn build(dir: &Path, sel: &Selection, scope: Scope) -> Result<CallGraph, Str
     let mut context_nodes: Vec<Node> = Vec::new();
     let mut context_index: HashMap<String, usize> = HashMap::new();
 
+    let families: Vec<String> = new_files.iter().map(|f| family(&f.path)).collect();
     for (fi, af) in new_files.iter().enumerate() {
         let mlines: Vec<&str> = af.masked.lines().collect();
         for (di, d) in af.defs.iter().enumerate() {
@@ -1271,15 +1296,20 @@ pub fn build(dir: &Path, sel: &Selection, scope: Scope) -> Result<CallGraph, Str
                 if nested.iter().any(|o| o.contains(ln)) {
                     continue;
                 }
-                let Some(cands) = symbols.get(&name) else {
+                let Some(all) = symbols.get(&name) else {
                     continue;
                 };
-                // Prefer same file, then same container, else accept up to 3 matches.
-                let same_file: Vec<_> = cands.iter().filter(|(cf, _)| *cf == fi).collect();
+                // Only definitions in files of the caller's language family.
+                let cands: Vec<&(usize, usize)> = all
+                    .iter()
+                    .filter(|(cf, _)| families[*cf] == families[fi])
+                    .collect();
+                // Prefer same file, else accept up to 3 matches.
+                let same_file: Vec<_> = cands.iter().copied().filter(|(cf, _)| *cf == fi).collect();
                 let targets: Vec<&(usize, usize)> = if !same_file.is_empty() {
                     same_file
-                } else if cands.len() <= 3 {
-                    cands.iter().collect()
+                } else if !cands.is_empty() && cands.len() <= 3 {
+                    cands
                 } else {
                     continue;
                 };
@@ -1471,6 +1501,18 @@ const config = (loadConfig());
             .map(|c| c.0)
             .collect();
         assert_eq!(calls, vec!["b", "c"]);
+    }
+
+    #[test]
+    fn language_families() {
+        assert_eq!(family("web/app.js"), family("web/store.ts"));
+        assert_eq!(family("a/b.TSX"), family("c.mjs"));
+        assert_eq!(family("x.c"), family("x.h"));
+        assert_eq!(family("A.kt"), family("B.java"));
+        assert_ne!(family("app.js"), family("models/user.rb"));
+        assert_ne!(family("main.go"), family("main.rs"));
+        assert_ne!(family("a.swift"), family("b.php"));
+        assert_ne!(family("v1.2/app"), family("x.2"));
     }
 
     #[test]

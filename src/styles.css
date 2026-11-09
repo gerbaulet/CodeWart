@@ -443,4 +443,7 @@ kbd { font: 400 11px var(--mono); color: var(--faint); }
 .gpanel-foot textarea { width: 100%; min-height: 64px; resize: vertical; padding: 10px 12px; border: 0; border-radius: 10px; font: 300 14px/1.5 var(--sans); outline: none; }
 .gpanel-foot .row { margin-top: 8px; }
 .snip { border-radius: 10px; overflow: hidden; background: var(--code); }
+/* call chain code panel: thin divider between the gutter and the code */
+.gpanel-code .ln .s { box-shadow: inset -1px 0 0 var(--edge); }
+.gpanel-code .ln code { padding-left: 10px; }
 .snip .ln { grid-template-columns: 40px 18px minmax(0, 1fr); font-size: 12px; line-height: 19px; }

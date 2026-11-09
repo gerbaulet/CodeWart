@@ -215,6 +215,45 @@ fn call_graph_connects_new_calls() {
 }
 
 #[test]
+fn call_graph_never_links_across_languages() {
+    let root = std::env::temp_dir().join(format!("codewart-e2e-lang-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let repo = Repo { root: root.clone() };
+    sh(&root, &["init", "-q", "-b", "main"]);
+    write(&root, "README.md", "x\n");
+    sh(&root, &["add", "."]);
+    sh(&root, &["commit", "-q", "-m", "init"]);
+    // Uncommitted: a JS caller, a TS `persist` and a Ruby `persist`.
+    write(
+        &root,
+        "web/app.js",
+        "export function run(x) {\n  return persist(x);\n}\n",
+    );
+    write(
+        &root,
+        "web/store.ts",
+        "export function persist(x: number) {\n  return x;\n}\n",
+    );
+    write(
+        &root,
+        "app/models/user.rb",
+        "class User\n  def persist(x)\n    x\n  end\nend\n",
+    );
+
+    let g = callgraph::build(&git::normalize(&root), &Selection::Working, Scope::Changed).unwrap();
+    let file_of = |id: &str| g.nodes.iter().find(|n| n.id == id).unwrap().file.clone();
+    let callees: Vec<String> = g.edges.iter().map(|e| file_of(&e.to)).collect();
+    assert_eq!(
+        callees,
+        vec!["web/store.ts".to_string()],
+        "edges: {:?}",
+        g.edges
+    );
+    drop(repo);
+}
+
+#[test]
 fn fingerprint_changes_when_files_change() {
     let (_repo, _main, wt) = fixture("fp");
     let a = git::fingerprint(&wt).unwrap();
