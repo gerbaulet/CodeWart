@@ -4,7 +4,7 @@ The owl signet with `< >` eyes and a folded page: a sharp-eyed reviewer for AI-w
 
 | Folder | Files | Use |
 | --- | --- | --- |
-| `app-icon/` | `codewart-icon-{16…1024}.png`, `codewart.icns`, `codewart.ico` | App icon on the macOS grid (824 px tile on a 1024 px transparent canvas). `make icons` builds `src-tauri/icons` from the 1024 px PNG. |
+| `app-icon/` | `codewart-icon.svg` (source), `codewart-icon-{16…1024}.png`, `codewart.icns`, `codewart.ico` | Flat app icon on the macOS grid (824 px tile on a 1024 px transparent canvas). `make icons` builds `src-tauri/icons` from the 1024 px PNG. |
 | `signet/` | `signet-dark.*`, `signet-light.*`, `signet-mono.svg` | The owl on its own. **dark** for light backgrounds, **light** for dark backgrounds, **mono** uses `currentColor` with the eyes knocked out. |
 | `wordmark/` | `wordmark-dark.*`, `wordmark-light.*`, `wordmark-mono.svg` | "Codewart" type: **Code** bold, **wart** light. Letter counters are transparent. |
 | `lockup/` | `codewart-lockup-dark.*`, `codewart-lockup-light.*` | Signet + wordmark side by side. |
