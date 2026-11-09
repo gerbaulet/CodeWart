@@ -152,6 +152,14 @@ pub fn reveal(path: &str) -> Result<(), String> {
     open_with_os(Path::new(path))
 }
 
+/// Open a web link (a PR page) in the default browser. Only http(s) URLs.
+pub fn open_url(url: &str) -> Result<(), String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err(format!("not a web link: {url}"));
+    }
+    open_with_os(Path::new(url))
+}
+
 pub fn open_terminal(path: &str) -> Result<(), String> {
     let custom = std::env::var("CODEWART_TERMINAL")
         .ok()

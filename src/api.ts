@@ -9,6 +9,7 @@ import type {
   GraphScope,
   History,
   Project,
+  PullRequest,
   Selection,
 } from "./types";
 
@@ -24,6 +25,8 @@ export const api = {
   callGraph: (worktree: string, selection: Selection, scope: GraphScope) =>
     invoke<CallGraph>("call_graph", { worktree, selection, scope }),
   fingerprint: (worktree: string) => invoke<string>("fingerprint", { worktree }),
+  prStatus: (worktree: string, branch: string) => invoke<PullRequest | null>("pr_status", { worktree, branch }),
+  openUrl: (url: string) => invoke<void>("open_url", { url }),
   editorInfo: () => invoke<Editor | null>("editor_info"),
   openInEditor: (root: string, file?: string, line?: number) =>
     invoke<void>("open_in_editor", { root, file: file ?? null, line: line ?? null }),

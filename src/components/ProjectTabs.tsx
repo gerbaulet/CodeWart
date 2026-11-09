@@ -1,19 +1,30 @@
-import { useState, type DragEvent } from "react";
-import type { CliStatus, Project, RepoGroup } from "../types";
-import { tildify } from "../util";
-import { Close, Monitor, Moon, Sun, Plus, Terminal } from "./Icons";
+import { useEffect, useState } from "react";
+import type { CliStatus, Project, PullRequest } from "../types";
+import { relativeTime, tildify } from "../util";
+import { Branch, Close, Monitor, Moon, Sun, Plus, Terminal, WorktreeIcon } from "./Icons";
 
 export type ThemePref = "system" | "dark" | "light";
 
+/** One open repo + worktree. Tabs sharing a group key (the branch) are drawn together. */
+export interface TabInfo {
+  id: string;
+  project: Project;
+  worktree: string;
+  group: { key: string; label: string };
+  /** A linked worktree (`git worktree add`) rather than the repo's main checkout. */
+  linked: boolean;
+  /** Last activity, unix seconds. */
+  updated: number;
+  pr: PullRequest | null;
+}
+
 interface Props {
-  tabs: { project: Project; group?: string }[];
-  groups: Record<string, RepoGroup>;
+  tabs: TabInfo[];
   activeId: string | null;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
-  onCloseGroup: (root: string) => void;
-  /** New tab order (project ids). */
-  onReorder: (ids: string[]) => void;
+  onCloseGroup: (key: string) => void;
+  onOpenPr: (url: string) => void;
   onOpen: () => void;
   theme: ThemePref;
   onTheme: (t: ThemePref) => void;
@@ -22,128 +33,139 @@ interface Props {
 }
 
 const NEXT: Record<ThemePref, ThemePref> = { system: "dark", dark: "light", light: "system" };
-const GROUP_HUES = ["var(--g1)", "var(--g2)", "var(--g3)", "var(--g4)"];
+const GROUP_TONES = 6; // --g1 … --g6 in styles.css
 
-function hueFor(root: string) {
+function hash(s: string) {
   let h = 0;
-  for (const c of root) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return GROUP_HUES[h % GROUP_HUES.length];
+  for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return h;
 }
 
-/** Consecutive tabs of one group form a unit; ungrouped tabs are units of one. */
-type Unit = { key: string; group?: string; tabs: Props["tabs"] };
+interface Unit {
+  key: string;
+  label: string;
+  tone: string;
+  updated: number;
+  tabs: TabInfo[];
+}
 
-function toUnits(tabs: Props["tabs"]): Unit[] {
-  const units: Unit[] = [];
+/**
+ * Group tabs by branch, most recently active group first. Each group keeps
+ * the tone its name hashes to unless another open group already took it
+ * (assigned in key order, so re-sorting never swaps colours).
+ */
+function toUnits(tabs: TabInfo[]): Unit[] {
+  const units = new Map<string, Unit>();
   for (const t of tabs) {
-    const last = units[units.length - 1];
-    if (t.group && last?.group === t.group) last.tabs.push(t);
-    else units.push({ key: t.group ? `g:${t.group}` : `t:${t.project.id}`, group: t.group, tabs: [t] });
+    const u = units.get(t.group.key);
+    if (u) {
+      u.tabs.push(t);
+      u.updated = Math.max(u.updated, t.updated);
+    } else units.set(t.group.key, { key: t.group.key, label: t.group.label, tone: "", updated: t.updated, tabs: [t] });
   }
-  return units;
+  const used = new Set<number>();
+  for (const u of [...units.values()].sort((a, b) => (a.key < b.key ? -1 : 1))) {
+    if (used.size >= GROUP_TONES) used.clear();
+    let i = hash(u.key) % GROUP_TONES;
+    while (used.has(i)) i = (i + 1) % GROUP_TONES;
+    used.add(i);
+    u.tone = `var(--g${i + 1})`;
+  }
+  return [...units.values()].sort((a, b) => b.updated - a.updated || (a.label < b.label ? -1 : 1));
+}
+
+function prInfo(pr: PullRequest): { cls: string; label: string; tip: string } {
+  const state = pr.state === "OPEN" ? (pr.isDraft ? "draft" : "open") : pr.state.toLowerCase();
+  const review =
+    pr.state === "OPEN" && pr.reviewDecision === "APPROVED"
+      ? { mark: " ✓", tip: " · approved" }
+      : pr.state === "OPEN" && pr.reviewDecision === "CHANGES_REQUESTED"
+        ? { mark: " !", tip: " · changes requested" }
+        : { mark: "", tip: "" };
+  return { cls: state, label: `#${pr.number}${review.mark}`, tip: `PR #${pr.number} · ${state}${review.tip}\n${pr.title}\nClick to open on GitHub` };
 }
 
 export function ProjectTabs(p: Props) {
   const units = toUnits(p.tabs);
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [over, setOver] = useState<string | null>(null);
+  // Re-render every minute so the "updated 3m" ages stay current.
+  const [, setClock] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setClock((c) => c + 1), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
-  const drop = (targetKey: string) => {
-    if (!dragging || dragging === targetKey) return;
-    const order = units.filter((u) => u.key !== dragging);
-    const moved = units.find((u) => u.key === dragging);
-    const at = order.findIndex((u) => u.key === targetKey);
-    const from = units.findIndex((u) => u.key === dragging);
-    const to = units.findIndex((u) => u.key === targetKey);
-    if (!moved || at < 0) return;
-    order.splice(from < to ? at + 1 : at, 0, moved);
-    p.onReorder(order.flatMap((u) => u.tabs.map((t) => t.project.id)));
-  };
-
-  const dragProps = (u: Unit) => ({
-    draggable: true,
-    onDragStart: (e: DragEvent) => {
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", u.key);
-      setDragging(u.key);
-    },
-    onDragEnd: () => {
-      setDragging(null);
-      setOver(null);
-    },
-    onDragOver: (e: DragEvent) => {
-      if (!dragging || dragging === u.key) return;
-      e.preventDefault();
-      setOver(u.key);
-    },
-    onDragLeave: () => setOver((o) => (o === u.key ? null : o)),
-    onDrop: (e: DragEvent) => {
-      e.preventDefault();
-      drop(u.key);
-      setOver(null);
-    },
-  });
-
-  const tab = (t: Props["tabs"][number], inGroup: boolean, unit?: Unit) => (
-    <button
-      key={t.project.id}
-      className={`ptab${t.project.id === p.activeId ? " on" : ""}`}
-      onClick={() => p.onSelect(t.project.id)}
-      onAuxClick={(e) => e.button === 1 && p.onClose(t.project.id)}
-      title={tildify(t.project.mainRoot)}
-      {...(!inGroup && unit ? dragProps(unit) : {})}
-    >
-      <span className="dot" />
-      {t.project.name}
-      <span
-        className="x"
-        role="button"
-        aria-label={`Close ${t.project.name}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          p.onClose(t.project.id);
-        }}
+  const tab = (t: TabInfo) => {
+    const pr = t.pr && prInfo(t.pr);
+    const kind = t.linked ? "Linked worktree" : "Main checkout";
+    return (
+      <button
+        key={t.id}
+        className={`ptab${t.id === p.activeId ? " on" : ""}`}
+        onClick={() => p.onSelect(t.id)}
+        onAuxClick={(e) => e.button === 1 && p.onClose(t.id)}
+        title={`${t.project.name} · ${kind}\n${tildify(t.worktree)}${t.updated ? `\nUpdated ${relativeTime(t.updated)} ago` : ""}`}
       >
-        <Close />
-      </span>
-    </button>
-  );
+        <span className={`kind${t.linked ? " wt" : ""}`} aria-label={kind}>
+          {t.linked ? <WorktreeIcon size={13} /> : <Branch size={13} />}
+        </span>
+        {t.project.name}
+        {pr && (
+          <span
+            className={`prpill ${pr.cls}`}
+            role="link"
+            title={pr.tip}
+            onClick={(e) => {
+              e.stopPropagation();
+              p.onOpenPr(t.pr!.url);
+            }}
+          >
+            {pr.label}
+          </span>
+        )}
+        <span
+          className="x"
+          role="button"
+          aria-label={`Close ${t.project.name} (${t.group.label})`}
+          onClick={(e) => {
+            e.stopPropagation();
+            p.onClose(t.id);
+          }}
+        >
+          <Close />
+        </span>
+      </button>
+    );
+  };
 
   return (
     <header className="tabsbar fl" data-tauri-drag-region>
       <nav className="ptabs" aria-label="Open projects" data-tauri-drag-region>
-        {units.map((u) =>
-          u.group ? (
-            <div
-              key={u.key}
-              className={`tabgroup${dragging === u.key ? " dragging" : ""}${over === u.key ? " over" : ""}${u.tabs.some((t) => t.project.id === p.activeId) ? " active" : ""}`}
-              style={{ ["--gc" as string]: hueFor(u.group) }}
-              role="group"
-              aria-label={`Repositories in ${p.groups[u.group]?.name ?? "group"}`}
-              {...dragProps(u)}
-            >
-              <span className="glabel" title={`${tildify(u.group)} · drag to move the group`}>
-                {p.groups[u.group]?.name ?? "group"}
-                <span
-                  className="x"
-                  role="button"
-                  aria-label="Close all repositories in this group"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    p.onCloseGroup(u.group!);
-                  }}
-                >
-                  <Close />
-                </span>
+        {units.map((u) => (
+          <div
+            key={u.key}
+            className={`tabgroup${u.tabs.some((t) => t.id === p.activeId) ? " active" : ""}`}
+            style={{ ["--gc" as string]: u.tone }}
+            role="group"
+            aria-label={`Repositories on ${u.label}`}
+          >
+            <span className="glabel" title={`Branch ${u.label}${u.updated ? ` · updated ${relativeTime(u.updated)} ago` : ""}`}>
+              {u.label}
+              {u.updated > 0 && <span className="age">{relativeTime(u.updated)}</span>}
+              <span
+                className="x"
+                role="button"
+                aria-label={`Close all repositories on ${u.label}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  p.onCloseGroup(u.key);
+                }}
+              >
+                <Close />
               </span>
-              {u.tabs.map((t) => tab(t, true))}
-            </div>
-          ) : (
-            <div key={u.key} className={`tabunit${dragging === u.key ? " dragging" : ""}${over === u.key ? " over" : ""}`}>
-              {tab(u.tabs[0], false, u)}
-            </div>
-          ),
-        )}
+            </span>
+            {u.tabs.map(tab)}
+          </div>
+        ))}
         <button className="iconbtn" onClick={p.onOpen} aria-label="Open project" data-tip="Open repo, worktree or folder…" data-tip-left>
           <Plus />
         </button>

@@ -5,6 +5,7 @@ mod cli;
 mod diff;
 mod discover;
 mod git;
+mod pr;
 mod session;
 
 #[cfg(test)]
@@ -107,6 +108,11 @@ async fn fingerprint(worktree: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn pr_status(worktree: String, branch: String) -> Result<Option<pr::PullRequest>, String> {
+    blocking(move || Ok(pr::for_branch(Path::new(&worktree), &branch))).await
+}
+
+#[tauri::command]
 fn editor_info() -> Option<actions::Editor> {
     actions::detect_editor()
 }
@@ -119,6 +125,11 @@ fn open_in_editor(root: String, file: Option<String>, line: Option<u32>) -> Resu
 #[tauri::command]
 fn open_in_terminal(path: String) -> Result<(), String> {
     actions::open_terminal(&path)
+}
+
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    actions::open_url(&url)
 }
 
 #[tauri::command]
@@ -180,10 +191,12 @@ pub fn run() {
             diff,
             call_graph,
             fingerprint,
+            pr_status,
             editor_info,
             open_in_editor,
             open_in_terminal,
             reveal_in_file_manager,
+            open_url,
             list_sessions,
             inject_text,
         ])

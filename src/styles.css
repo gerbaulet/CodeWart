@@ -122,20 +122,25 @@ code, pre, .mono { font-family: var(--mono); }
 .ptab:hover .x, .ptab.on .x { opacity: 1; }
 .ptab .x:hover { background: var(--pane2); color: var(--text); }
 /* repo groups: tabs opened together from one folder move as one unit */
-:root { --g1: #c6f24e; --g2: #82aaff; --g3: #c792ea; --g4: #f0a35e; }
-:root[data-theme="light"] { --g1: #5fa800; --g2: #2f6fd6; --g3: #8a4fc8; --g4: #c56a12; }
-.tabunit { display: flex; flex: none; border-radius: 999px; }
-.tabgroup { position: relative; display: flex; align-items: center; gap: 2px; flex: none; padding: 3px 3px 3px 4px; border-radius: 999px; background: color-mix(in srgb, var(--gc) 9%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--gc) 35%, transparent); cursor: grab; }
+:root { --g1: #c6f24e; --g2: #82aaff; --g3: #c792ea; --g4: #f0a35e; --g5: #5fd6c4; --g6: #f48fb1; }
+:root[data-theme="light"] { --g1: #5f9a00; --g2: #2f6fd6; --g3: #8a4fc8; --g4: #c06a12; --g5: #0f8f7e; --g6: #c43d78; }
+.tabgroup { position: relative; display: flex; align-items: center; gap: 2px; flex: none; padding: 3px 3px 3px 4px; border-radius: 999px; background: color-mix(in srgb, var(--gc) 9%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--gc) 30%, transparent); }
 .tabgroup.active { background: color-mix(in srgb, var(--gc) 14%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--gc) 70%, transparent); }
-.tabgroup .glabel { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 6px 0 10px; border-radius: 999px; background: color-mix(in srgb, var(--gc) 22%, transparent); color: var(--text); font: 500 12px var(--mono); white-space: nowrap; }
-.tabgroup .glabel .x { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; color: var(--faint); cursor: pointer; }
+.tabgroup .glabel { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px 0 10px; border-radius: 999px; background: color-mix(in srgb, var(--gc) 22%, transparent); color: var(--text); font: 500 12px var(--mono); white-space: nowrap; }
+.tabgroup .glabel .age { color: var(--muted); font: 400 11px var(--sans); }
+.tabgroup .glabel .x { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; color: var(--faint); cursor: pointer; margin-left: -2px; }
 .tabgroup .glabel .x:hover { background: var(--pane2); color: var(--text); }
-.tabgroup .ptab { height: 28px; }
+.tabgroup .ptab { height: 28px; padding-left: 10px; gap: 6px; }
 .tabgroup .ptab.on { background: color-mix(in srgb, var(--gc) 34%, var(--pane)); color: var(--text); font-weight: 500; }
-.tabgroup .ptab.on .dot { background: var(--gc); }
-.tabgroup.dragging, .tabunit.dragging { opacity: 0.45; }
-.tabgroup.over, .tabunit.over { box-shadow: inset 2px 0 0 var(--acc), inset 0 0 0 1.5px color-mix(in srgb, var(--acc) 50%, transparent); }
-.ptab[draggable="true"] { cursor: grab; }
+.ptab .kind { display: inline-grid; place-items: center; color: var(--faint); }
+.ptab .kind.wt { color: color-mix(in srgb, var(--gc, var(--acc)) 80%, var(--text)); }
+.ptab.on .kind { color: var(--text); }
+.prpill { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 999px; font: 500 11px var(--mono); cursor: pointer; background: var(--pane2); color: var(--muted); }
+.prpill:hover { filter: brightness(1.15); text-decoration: underline; }
+.prpill.open { background: var(--addbg); color: var(--add); }
+.prpill.draft { background: var(--pane2); color: var(--faint); box-shadow: inset 0 0 0 1px var(--edge); }
+.prpill.merged { background: color-mix(in srgb, var(--kw) 16%, transparent); color: var(--kw); }
+.prpill.closed { background: var(--delbg); color: var(--del); }
 .clibtn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--pane2); color: var(--text); font: 400 12px var(--sans); cursor: pointer; flex: none; }
 .clibtn:hover { background: var(--sel); }
 .clibtn code { font: 500 12px var(--mono); }

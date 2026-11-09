@@ -37,6 +37,8 @@ interface Props {
   /** Stable callbacks (keyed by project id) so inactive workspaces don't re-render. */
   onWorktree: (projectId: string, path: string) => void;
   onRescan: (projectId: string) => void;
+  /** The worktree changed on disk (quietly re-reads branches / last-update times). */
+  onActivity: (projectId: string) => void;
   /** Shared across all open repos, so switching repos keeps the view. */
   view: View;
   onView: (v: View) => void;
@@ -96,6 +98,7 @@ export const Workspace = memo(function Workspace({
   editor,
   onWorktree,
   onRescan,
+  onActivity,
   view,
   onView,
   scope,
@@ -204,7 +207,10 @@ export const Workspace = memo(function Workspace({
       try {
         const fp = await api.fingerprint(worktree);
         if (stopped) return;
-        if (lastFp.current !== null && fp !== lastFp.current) setTick((t) => t + 1);
+        if (lastFp.current !== null && fp !== lastFp.current) {
+          setTick((t) => t + 1);
+          onActivity(project.id);
+        }
         lastFp.current = fp;
       } catch {
         /* worktree may be mid-operation */
@@ -216,7 +222,7 @@ export const Workspace = memo(function Workspace({
       stopped = true;
       window.clearInterval(id);
     };
-  }, [active, worktree]);
+  }, [active, worktree, onActivity, project.id]);
 
   // ---- selection ---------------------------------------------------------
   const selectedKeys = useMemo(() => {

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { History, Project, View } from "../types";
-import { tildify } from "../util";
-import { Branch, ChevronDown, DiffIcon, GraphIcon, Refresh } from "./Icons";
+import { relativeTime, tildify } from "../util";
+import { Branch, ChevronDown, DiffIcon, GraphIcon, Refresh, WorktreeIcon } from "./Icons";
 import { Popover } from "./Popover";
 
 interface Props {
@@ -30,9 +30,10 @@ export function WorktreeBar({ project, worktree, history, view, onView, onWorktr
           <ChevronDown />
         </button>
         <Popover open={open} onClose={() => setOpen(false)}>
-          <div className="cap">Worktrees · {project.name}</div>
+          <div className="cap">Worktrees · {project.name} · newest first</div>
           {project.worktrees
             .filter((w) => !w.bare)
+            .sort((a, b) => b.updated - a.updated)
             .map((w) => (
               <button
                 key={w.path}
@@ -43,20 +44,16 @@ export function WorktreeBar({ project, worktree, history, view, onView, onWorktr
                 }}
               >
                 <span className="r1">
-                  <span
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      background: w.path === worktree ? "var(--acc)" : "var(--faint)",
-                    }}
-                  />
+                  <span style={{ display: "inline-grid", color: w.path === worktree ? "var(--acc)" : "var(--faint)" }}>
+                    {w.isMain ? <Branch size={13} /> : <WorktreeIcon size={13} />}
+                  </span>
                   {w.branch ?? `detached @ ${w.head.slice(0, 7)}`}
-                  {w.isMain && <span className="badge">main worktree</span>}
+                  <span className="badge">{w.isMain ? "main checkout" : "worktree"}</span>
                   {w.locked && <span className="badge">locked</span>}
                 </span>
-                <span className="m" style={{ paddingLeft: 14 }}>
+                <span className="m" style={{ paddingLeft: 21 }}>
                   {tildify(w.path)}
+                  {w.updated > 0 && ` · ${relativeTime(w.updated)}`}
                 </span>
               </button>
             ))}

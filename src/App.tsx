@@ -4,16 +4,24 @@ import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, errorMessage } from "./api";
 import { Logo } from "./components/Icons";
-import { ProjectTabs, type ThemePref } from "./components/ProjectTabs";
+import { ProjectTabs, type TabInfo, type ThemePref } from "./components/ProjectTabs";
 import { Workspace } from "./components/Workspace";
-import type { CliStatus, Editor, Filters, GraphScope, Peer, Project, RepoGroup, View } from "./types";
+import type { CliStatus, Editor, Filters, GraphScope, Peer, Project, PullRequest, View } from "./types";
 import { isMac, tildify } from "./util";
 
+/** One tab per repo + worktree, so a repo can be open on several worktrees at once. */
 interface Tab {
   project: Project;
   worktree: string;
-  /** Root folder of the repo group this tab belongs to. */
-  group?: string;
+}
+
+const tabId = (projectId: string, worktree: string) => `${projectId}::${worktree}`;
+
+/** Tabs are grouped by the branch their worktree has checked out. */
+function groupOf(project: Project, worktree: string): TabInfo["group"] {
+  const w = project.worktrees.find((x) => x.path === worktree);
+  if (w?.branch) return { key: `b:${w.branch}`, label: w.branch };
+  return { key: `d:${worktree}`, label: w ? `detached ${w.head.slice(0, 7)}` : worktree.split(/[\\/]/).pop() || worktree };
 }
 
 interface Toast {
@@ -25,12 +33,10 @@ interface Toast {
 interface SavedTab {
   path: string;
   worktree: string;
-  group?: string;
 }
 
 const STORE = {
   tabs: "codewart.tabs",
-  groups: "codewart.groups",
   active: "codewart.active",
   theme: "codewart.theme",
   filters: "codewart.filters",
@@ -55,6 +61,11 @@ function save(key: string, value: unknown) {
 }
 
 const NO_PEERS: Peer[] = [];
+/** How often every open repo's worktrees (branches, last update) are re-read. */
+const RESCAN_MS = 30_000;
+/** How often PR status is re-fetched from GitHub. */
+const PR_MS = 120_000;
+const prKey = (projectId: string, branch: string) => `${projectId}::${branch}`;
 
 /** macOS: the strip the window buttons sit in, with the logo, name and version centred. */
 function TitleStrip() {
@@ -75,7 +86,6 @@ function TitleStrip() {
 
 export default function App() {
   const [tabs, setTabs] = useState<Tab[]>([]);
-  const [groups, setGroups] = useState<Record<string, RepoGroup>>(() => load(STORE.groups, {}));
   const [activeId, setActiveId] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemePref>(() => load(STORE.theme, "system"));
   const [filters, setFilters] = useState<Filters>(() =>
@@ -117,38 +127,26 @@ export default function App() {
     if (!booted) return;
     save(
       STORE.tabs,
-      tabs.map<SavedTab>((t) => ({ path: t.project.mainRoot, worktree: t.worktree, group: t.group })),
+      tabs.map<SavedTab>((t) => ({ path: t.project.mainRoot, worktree: t.worktree })),
     );
-    // Only keep groups that still have tabs.
-    const used = new Set(tabs.map((t) => t.group).filter(Boolean));
-    save(STORE.groups, Object.fromEntries(Object.entries(groups).filter(([k]) => used.has(k))));
     save(STORE.active, activeId);
-  }, [tabs, groups, activeId, booted]);
+  }, [tabs, activeId, booted]);
 
   // ---- opening projects ------------------------------------------------------
-  /** Open (or refresh) one repository as a tab. Grouped tabs stay adjacent. */
+  /** Open one repository on a worktree as a tab (or focus it if already open). */
   const openRepo = useCallback(
-    async (path: string, opts: { activate?: boolean; worktree?: string; quiet?: boolean; group?: string } = {}) => {
+    async (path: string, opts: { activate?: boolean; worktree?: string; quiet?: boolean } = {}) => {
       try {
         const project = await api.openProject(path);
         const wt = opts.worktree && project.worktrees.some((w) => w.path === opts.worktree) ? opts.worktree : project.openedWorktree;
+        const id = tabId(project.id, wt);
         setTabs((ts) => {
-          const i = ts.findIndex((t) => t.project.id === project.id);
-          if (i >= 0) {
-            const copy = ts.slice();
-            copy[i] = { project, worktree: opts.worktree ? wt : project.openedWorktree, group: opts.group ?? ts[i].group };
-            return copy;
-          }
-          const tab: Tab = { project, worktree: wt, group: opts.group };
-          if (opts.group) {
-            let last = -1;
-            ts.forEach((t, j) => t.group === opts.group && (last = j));
-            if (last >= 0) return [...ts.slice(0, last + 1), tab, ...ts.slice(last + 1)];
-          }
-          return [...ts, tab];
+          // Every tab of this repo gets the fresh worktree list.
+          const next = ts.map((t) => (t.project.id === project.id ? { ...t, project } : t));
+          return next.some((t) => tabId(t.project.id, t.worktree) === id) ? next : [...next, { project, worktree: wt }];
         });
-        if (opts.activate !== false) setActiveId(project.id);
-        return project;
+        if (opts.activate !== false) setActiveId(id);
+        return id;
       } catch (e) {
         if (!opts.quiet) toast(errorMessage(e), true);
         return null;
@@ -163,13 +161,12 @@ export default function App() {
       try {
         const d = await api.discover(path);
         if (d.kind === "repo") return void (await openRepo(d.path, opts));
-        setGroups((g) => ({ ...g, [d.root]: { root: d.root, name: d.name } }));
-        let first: Project | null = null;
+        let first: string | null = null;
         for (const repo of d.repos) {
-          const p = await openRepo(repo, { group: d.root, activate: false, worktree: repo });
-          first ??= p;
+          const id = await openRepo(repo, { activate: false, worktree: repo });
+          first ??= id;
         }
-        if (first && opts.activate !== false) setActiveId(first.id);
+        if (first && opts.activate !== false) setActiveId(first);
         toast(`Opened ${d.repos.length} repositories from ${d.name}`);
       } catch (e) {
         toast(errorMessage(e), true);
@@ -187,12 +184,12 @@ export default function App() {
       api.cliStatus().then(setCli).catch(() => {});
       const saved = load<SavedTab[]>(STORE.tabs, []);
       const savedActive = load<string | null>(STORE.active, null);
-      for (const s of saved) await openRepo(s.path, { activate: false, worktree: s.worktree, quiet: true, group: s.group });
+      for (const s of saved) await openRepo(s.path, { activate: false, worktree: s.worktree, quiet: true });
       if (savedActive) setActiveId((a) => a ?? savedActive);
       const launch = await api.launchPaths().catch(() => [] as string[]);
       for (const p of launch) await openPath(p);
       setTabs((ts) => {
-        setActiveId((a) => (a && ts.some((t) => t.project.id === a) ? a : ts[0]?.project.id ?? null));
+        setActiveId((a) => (a && ts.some((t) => tabId(t.project.id, t.worktree) === a) ? a : ts[0] ? tabId(ts[0].project.id, ts[0].worktree) : null));
         return ts;
       });
       setBooted(true);
@@ -208,24 +205,81 @@ export default function App() {
 
   // Stable callbacks: Workspace is memoised, so inline lambdas would make every
   // open (hidden) project re-render on each tab switch.
-  const setWorktree = useCallback(
-    (projectId: string, wt: string) => setTabs((ts) => ts.map((x) => (x.project.id === projectId ? { ...x, worktree: wt } : x))),
-    [],
-  );
+  /** Focus the tab for a repo + worktree, opening it if needed (worktree dropdown, related repos). */
+  const focusWorktree = useCallback((projectId: string, wt: string) => {
+    const id = tabId(projectId, wt);
+    setTabs((ts) => {
+      if (ts.some((t) => tabId(t.project.id, t.worktree) === id)) return ts;
+      const src = ts.find((t) => t.project.id === projectId);
+      return src ? [...ts, { project: src.project, worktree: wt }] : ts;
+    });
+    setActiveId(id);
+  }, []);
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
+  /**
+   * Re-read a repo's worktrees (branches and last-update times change while
+   * agents work) without opening tabs. Unchanged data keeps the same objects,
+   * so the memoised workspaces don't re-render.
+   */
   const rescan = useCallback(
-    (projectId: string) => {
+    (projectId: string, quiet = false) => {
       const t = tabsRef.current.find((x) => x.project.id === projectId);
-      if (t) void openRepo(t.project.mainRoot, { worktree: t.worktree, group: t.group });
+      if (!t) return;
+      api
+        .openProject(t.project.mainRoot)
+        .then((project) => {
+          const { openedWorktree: _a, ...fresh } = project;
+          const { openedWorktree: _b, ...old } = t.project;
+          if (JSON.stringify(fresh) === JSON.stringify(old)) return;
+          setTabs((ts) => ts.map((x) => (x.project.id === project.id ? { ...x, project } : x)));
+        })
+        .catch((e) => !quiet && toast(errorMessage(e), true));
     },
-    [openRepo],
+    [toast],
   );
-  /** Switch to a related repo, optionally onto a specific worktree. */
-  const jumpToPeer = useCallback((projectId: string, worktree?: string) => {
-    if (worktree) setTabs((ts) => ts.map((x) => (x.project.id === projectId ? { ...x, worktree } : x)));
-    setActiveId(projectId);
+  const rescanQuiet = useCallback((projectId: string) => rescan(projectId, true), [rescan]);
+  useEffect(() => {
+    if (!booted) return;
+    const id = window.setInterval(() => {
+      if (document.hidden) return;
+      for (const pid of new Set(tabsRef.current.map((t) => t.project.id))) rescan(pid, true);
+    }, RESCAN_MS);
+    return () => window.clearInterval(id);
+  }, [booted, rescan]);
+
+  // ---- pull requests (via `gh`, optional) ------------------------------------
+  const [prs, setPrs] = useState<Record<string, PullRequest | null>>({});
+  const prsRef = useRef(prs);
+  prsRef.current = prs;
+  const fetchPrs = useCallback((force: boolean) => {
+    const seen = new Set<string>();
+    for (const t of tabsRef.current) {
+      const branch = t.project.worktrees.find((w) => w.path === t.worktree)?.branch;
+      if (!branch) continue;
+      const key = prKey(t.project.id, branch);
+      if (seen.has(key) || (!force && key in prsRef.current)) continue;
+      seen.add(key);
+      api
+        .prStatus(t.worktree, branch)
+        .then((pr) =>
+          setPrs((m) => (JSON.stringify(m[key] ?? null) === JSON.stringify(pr ?? null) && key in m ? m : { ...m, [key]: pr ?? null })),
+        )
+        .catch(() => setPrs((m) => (key in m ? m : { ...m, [key]: null })));
+    }
   }, []);
+  useEffect(() => fetchPrs(false), [tabs, fetchPrs]);
+  useEffect(() => {
+    const id = window.setInterval(() => !document.hidden && fetchPrs(true), PR_MS);
+    return () => window.clearInterval(id);
+  }, [fetchPrs]);
+  const jumpToPeer = useCallback(
+    (projectId: string, worktree?: string) => {
+      const wt = worktree ?? tabsRef.current.find((t) => t.project.id === projectId)?.worktree;
+      if (wt) focusWorktree(projectId, wt);
+    },
+    [focusWorktree],
+  );
 
   const pickFolder = async () => {
     const dir = await openDialog({ directory: true, multiple: false, title: "Open a repository, worktree or folder of repos" });
@@ -234,15 +288,14 @@ export default function App() {
 
   const closeTabs = (ids: string[]) => {
     setTabs((ts) => {
-      const first = ts.findIndex((t) => ids.includes(t.project.id));
-      const next = ts.filter((t) => !ids.includes(t.project.id));
-      if (activeId && ids.includes(activeId)) setActiveId(next[Math.max(0, first - 1)]?.project.id ?? null);
+      const gone = (t: Tab) => ids.includes(tabId(t.project.id, t.worktree));
+      const first = ts.findIndex(gone);
+      const next = ts.filter((t) => !gone(t));
+      const after = next[Math.max(0, first - 1)];
+      if (activeId && ids.includes(activeId)) setActiveId(after ? tabId(after.project.id, after.worktree) : null);
       return next;
     });
   };
-
-  const reorder = (ids: string[]) =>
-    setTabs((ts) => ids.map((id) => ts.find((t) => t.project.id === id)).filter((t): t is Tab => !!t));
 
   const installCli = async () => {
     try {
@@ -259,69 +312,86 @@ export default function App() {
     }
   };
 
-  // Other repos in the same group, per tab (stable arrays for memoised workspaces).
+  const infos = useMemo<TabInfo[]>(
+    () =>
+      tabs.map((t) => {
+        const w = t.project.worktrees.find((x) => x.path === t.worktree);
+        return {
+          id: tabId(t.project.id, t.worktree),
+          project: t.project,
+          worktree: t.worktree,
+          group: groupOf(t.project, t.worktree),
+          linked: !w?.isMain,
+          updated: w?.updated ?? 0,
+          pr: w?.branch ? prs[prKey(t.project.id, w.branch)] ?? null : null,
+        };
+      }),
+    [tabs, prs],
+  );
+
+  // Other repos on the same branch, per tab (stable arrays for memoised workspaces).
   const peers = useMemo(() => {
     const m = new Map<string, Peer[]>();
-    for (const t of tabs) {
-      if (!t.group) continue;
-      const members = tabs.filter((o) => o.group === t.group);
-      const me = members.findIndex((o) => o.project.id === t.project.id);
-      const next = members[(me + 1) % members.length]?.project.id;
+    for (const t of infos) {
+      const members = infos.filter((o) => o.group.key === t.group.key);
+      if (members.length < 2) continue;
+      const me = members.findIndex((o) => o.id === t.id);
+      const next = members[(me + 1) % members.length]?.id;
       m.set(
-        t.project.id,
+        t.id,
         members
-          .filter((o) => o.project.id !== t.project.id)
+          .filter((o) => o.id !== t.id)
           .map((o) => ({
             id: o.project.id,
             name: o.project.name,
             worktree: o.worktree,
             worktrees: o.project.worktrees,
-            isNext: o.project.id === next,
+            isNext: o.id === next,
           })),
       );
     }
     return m;
-  }, [tabs]);
+  }, [infos]);
 
-  const active = tabs.find((t) => t.project.id === activeId) ?? null;
+  const active = infos.find((t) => t.id === activeId) ?? null;
   useEffect(() => {
-    document.title = active ? `${active.project.name} — Codewart` : "Codewart";
+    document.title = active ? `${active.project.name} · ${active.group.label} — Codewart` : "Codewart";
   }, [active]);
 
   return (
     <div className={`app${isMac ? " mac" : ""}`}>
       {isMac && <TitleStrip />}
       <ProjectTabs
-        tabs={tabs.map((t) => ({ project: t.project, group: t.group }))}
-        groups={groups}
+        tabs={infos}
         activeId={activeId}
         onSelect={setActiveId}
         onClose={(id) => closeTabs([id])}
-        onCloseGroup={(root) => closeTabs(tabs.filter((t) => t.group === root).map((t) => t.project.id))}
-        onReorder={reorder}
+        onCloseGroup={(key) => closeTabs(infos.filter((t) => t.group.key === key).map((t) => t.id))}
+        onOpenPr={(url) => api.openUrl(url).catch((e) => toast(errorMessage(e), true))}
         onOpen={pickFolder}
         theme={theme}
         onTheme={setTheme}
         cli={cli}
         onInstallCli={installCli}
       />
-      {tabs.map((t) => (
+      {infos.map((t) => (
         <Workspace
-          key={`${t.project.id}::${t.worktree}`}
+          key={t.id}
           project={t.project}
           worktree={t.worktree}
-          active={t.project.id === activeId}
+          active={t.id === activeId}
           filters={filters}
           onFilters={setFilters}
           editor={editor}
-          onWorktree={setWorktree}
+          onWorktree={focusWorktree}
           onRescan={rescan}
+          onActivity={rescanQuiet}
           view={view}
           onView={setView}
           scope={scope}
           onScope={setScope}
-          peers={peers.get(t.project.id) ?? NO_PEERS}
-          groupName={t.group ? groups[t.group]?.name : undefined}
+          peers={peers.get(t.id) ?? NO_PEERS}
+          groupName={t.group.label}
           onJumpToPeer={jumpToPeer}
           toast={toast}
         />

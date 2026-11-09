@@ -96,6 +96,9 @@ pub struct Worktree {
     pub detached: bool,
     pub bare: bool,
     pub locked: bool,
+    /// Last activity, unix seconds: the newer of HEAD's commit time and the
+    /// newest modification of an uncommitted file.
+    pub updated: i64,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -162,6 +165,7 @@ pub fn list_worktrees(dir: &Path) -> Result<Vec<Worktree>, String> {
                 detached: false,
                 bare: false,
                 locked: false,
+                updated: 0,
             });
         } else if let Some(w) = cur.as_mut() {
             if let Some(h) = line.strip_prefix("HEAD ") {
@@ -179,7 +183,33 @@ pub fn list_worktrees(dir: &Path) -> Result<Vec<Worktree>, String> {
             }
         }
     }
+    for w in list.iter_mut().filter(|w| !w.bare) {
+        w.updated = last_update(Path::new(&w.path));
+    }
     Ok(list)
+}
+
+/// Newest of HEAD's commit time and the mtimes of uncommitted files.
+fn last_update(dir: &Path) -> i64 {
+    let mut t = git(dir, &["log", "-1", "--format=%ct", "HEAD"])
+        .ok()
+        .and_then(|s| s.trim().parse::<i64>().ok())
+        .unwrap_or(0);
+    if let Ok(status) = git(
+        dir,
+        &["status", "--porcelain=v1", "-z", "--untracked-files=normal"],
+    ) {
+        for entry in status.split('\0').filter(|e| e.len() > 3) {
+            let modified = std::fs::metadata(dir.join(&entry[3..]))
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok());
+            if let Some(d) = modified {
+                t = t.max(d.as_secs() as i64);
+            }
+        }
+    }
+    t
 }
 
 pub fn detect_default_branch(dir: &Path) -> Option<String> {

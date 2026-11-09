@@ -6,6 +6,18 @@ export interface Worktree {
   detached: boolean;
   bare: boolean;
   locked: boolean;
+  /** Last activity (unix seconds): newest of HEAD's commit and uncommitted edits. */
+  updated: number;
+}
+
+/** GitHub pull request for a branch (via the `gh` CLI). */
+export interface PullRequest {
+  number: number;
+  title: string;
+  url: string;
+  state: "OPEN" | "CLOSED" | "MERGED";
+  isDraft: boolean;
+  reviewDecision?: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | "" | null;
 }
 
 export interface Project {

@@ -102,3 +102,7 @@ export const Comment = (p: P) => (
 export const SidebarIcon = (p: P) => (
   <svg {...base(p)}><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" /><path d="M6 2.75v10.5" /></svg>
 );
+/** A linked worktree: a branch checked out in a separate folder. */
+export const WorktreeIcon = (p: P) => (
+  <svg {...base(p)}><path d="M4.5 2.5v11M4.5 6.5c0 2 1.5 2.5 4 2.5" /><rect x="9" y="6.75" width="5" height="4.5" rx="1" /></svg>
+);
