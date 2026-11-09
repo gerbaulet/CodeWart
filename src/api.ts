@@ -10,11 +10,16 @@ import type {
   History,
   Project,
   PullRequest,
+  ReviewRequest,
   Selection,
 } from "./types";
 
 export const api = {
   launchPaths: () => invoke<string[]>("launch_paths"),
+  launchReview: () => invoke<ReviewRequest | null>("launch_review"),
+  reviewWaiting: (reply: string) => invoke<boolean>("review_waiting", { reply }),
+  writeReviewReply: (reply: string, text: string) => invoke<void>("write_review_reply", { reply, text }),
+  requestAttention: () => invoke<void>("request_attention"),
   discover: (path: string) => invoke<Discovery>("discover", { path }),
   openProject: (path: string) => invoke<Project>("open_project", { path }),
   cliStatus: () => invoke<CliStatus>("cli_status"),

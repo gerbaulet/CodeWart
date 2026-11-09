@@ -1,8 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import type { FileDiff, ReviewComment } from "../types";
-import { TAG_LABEL, splitPath } from "../util";
-import { CodeLines, type Row } from "./CodeLines";
-import { ChevronDown, ChevronRight, Code } from "./Icons";
+import { TAG_LABEL, isFileComment, splitPath } from "../util";
+import { CodeLines, FileComments, type Row } from "./CodeLines";
+import { ChevronDown, ChevronRight, Code, Comment } from "./Icons";
 
 export interface ScrollTarget {
   path: string;
@@ -167,6 +167,11 @@ const FileBlock = memo(function FileBlock({
     [file.hunks],
   );
   const firstChange = file.hunks.flatMap((h) => h.lines).find((l) => l.kind !== "ctx");
+  const [composing, setComposing] = useState(false);
+  const [fileComments, lineComments] = useMemo(
+    () => [comments.filter(isFileComment), comments.filter((c) => !isFileComment(c))],
+    [comments],
+  );
 
   return (
     <section className="dfile" data-file={file.path}>
@@ -179,6 +184,16 @@ const FileBlock = memo(function FileBlock({
           <span className="dir">{dir}</span>
           {name}
         </h3>
+        <button
+          className={`iconbtn filecomment${fileComments.length ? " has" : ""}`}
+          style={{ width: 26, height: 26 }}
+          aria-label="Comment on this file"
+          data-tip={fileComments.length ? `Comment on file (${fileComments.length} in batch)` : "Comment on file"}
+          data-tip-left
+          onClick={() => setComposing(true)}
+        >
+          <Comment size={14} />
+        </button>
         <span className="m" style={{ flex: "none" }}>
           {file.additions > 0 && <span className="add-c">+{file.additions}</span>} {file.deletions > 0 && <span className="del-c">−{file.deletions}</span>}
         </span>
@@ -201,6 +216,17 @@ const FileBlock = memo(function FileBlock({
           </button>
         )}
       </div>
+      <FileComments
+        path={file.path}
+        side={file.status === "deleted" ? "old" : "new"}
+        comments={fileComments}
+        composing={composing}
+        onCloseComposer={() => setComposing(false)}
+        onAddComment={onAddComment}
+        onRemoveComment={onRemoveComment}
+        onUpdateComment={onUpdateComment}
+        sendLabel={sendLabel}
+      />
       {!collapsed && (
         <>
           {file.binary && <div className="dnote">Binary file not shown.</div>}
@@ -213,7 +239,7 @@ const FileBlock = memo(function FileBlock({
             <CodeLines
               path={file.path}
               rows={rows}
-              comments={comments}
+              comments={lineComments}
               onAddComment={onAddComment}
               onRemoveComment={onRemoveComment}
               onUpdateComment={onUpdateComment}

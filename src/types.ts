@@ -163,7 +163,7 @@ export interface AgentSession {
 export interface ReviewComment {
   id: string;
   file: string;
-  /** Line number on the side the comment was made on. */
+  /** Line number on the side the comment was made on; 0 = the whole file. */
   line: number;
   endLine?: number;
   side: "new" | "old";
@@ -207,4 +207,36 @@ export interface Peer {
   isNext: boolean;
   worktree: string;
   worktrees: Worktree[];
+}
+
+/** A review that was handed to the agent, kept so past rounds stay visible. */
+export interface ReviewSession {
+  /** 1, 2, 3 … per worktree. */
+  n: number;
+  /** When it was handed over (ms since epoch). */
+  at: number;
+  /** What was reviewed, e.g. "commit abc1234 (…) on `feat/x`". */
+  target: string;
+  via: "session" | "copy";
+  /** Terminal pane it was sent to (via = "session"). */
+  sentTo?: string;
+  comments: ReviewComment[];
+  note: string;
+  markdown: string;
+}
+
+/** `wart review` from an agent: a worktree waiting for a review. */
+export interface ReviewRequest {
+  path: string;
+  /** File the review is written to (the waiting launcher prints it). */
+  reply: string;
+  message?: string | null;
+}
+
+/** A review request as shown on a tab. */
+export interface PendingReview {
+  reply: string;
+  message: string;
+  /** When it was requested (ms since epoch). */
+  at: number;
 }

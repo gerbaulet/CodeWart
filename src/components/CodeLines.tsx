@@ -303,9 +303,110 @@ export const CodeLines = memo(function CodeLines({ path, rows, comments, onAddCo
   );
 });
 
+/**
+ * Comments on a file as a whole, shown under its header in the diff, plus the
+ * composer opened from the header's comment button.
+ */
+export function FileComments({
+  path,
+  side,
+  comments,
+  composing,
+  onCloseComposer,
+  onAddComment,
+  onRemoveComment,
+  onUpdateComment,
+  sendLabel,
+}: {
+  path: string;
+  side: "new" | "old";
+  comments: ReviewComment[];
+  composing: boolean;
+  onCloseComposer: () => void;
+  onAddComment: (c: ReviewComment) => void;
+  onRemoveComment: (id: string) => void;
+  onUpdateComment: (id: string, body: string) => void;
+  sendLabel?: string;
+}) {
+  const [editing, setEditing] = useState<string | null>(null);
+  if (!comments.length && !composing) return null;
+  return (
+    <div className="filecomments">
+      {comments.map((c) =>
+        editing === c.id ? (
+          <Composer
+            key={c.id}
+            side={c.side}
+            draft={c}
+            label="whole file"
+            initial={c.body}
+            editing
+            sendLabel={sendLabel}
+            onCancel={() => setEditing(null)}
+            onRemove={() => {
+              onRemoveComment(c.id);
+              setEditing(null);
+            }}
+            onSave={(body) => {
+              onUpdateComment(c.id, body);
+              setEditing(null);
+            }}
+          />
+        ) : (
+          <div className="inline" key={c.id}>
+            <div
+              className="ccard note no-arrow"
+              role="button"
+              tabIndex={0}
+              title="Click to edit"
+              onClick={() => setEditing(c.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setEditing(c.id);
+                }
+              }}
+            >
+              <div className="who">
+                <b>You</b>
+                <span className="m">whole file · in batch · click to edit</span>
+                <span className="grow" />
+                <button
+                  className="linkbtn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveComment(c.id);
+                  }}
+                >
+                  remove
+                </button>
+              </div>
+              <p>{c.body}</p>
+            </div>
+          </div>
+        ),
+      )}
+      {composing && (
+        <Composer
+          side={side}
+          draft={{ line: 0 }}
+          label="whole file"
+          sendLabel={sendLabel}
+          onCancel={onCloseComposer}
+          onSave={(body) => {
+            onAddComment({ id: newId(), file: path, side, line: 0, code: "", body });
+            onCloseComposer();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 function Composer({
   side,
   draft,
+  label,
   initial = "",
   editing = false,
   onCancel,
@@ -315,6 +416,8 @@ function Composer({
 }: {
   side: "new" | "old";
   draft: { line: number; endLine?: number };
+  /** Replaces the "line N" caption (e.g. "whole file"). */
+  label?: string;
   initial?: string;
   editing?: boolean;
   onCancel: () => void;
@@ -334,11 +437,11 @@ function Composer({
   const end = draft.endLine ?? draft.line;
   return (
     <div className="inline">
-      <div className={`ccard note editing arrow-${side}`}>
+      <div className={`ccard note editing ${label ? "no-arrow" : `arrow-${side}`}`}>
         <div className="who">
           <b>You</b>
           <span className="m">
-            {end !== draft.line ? `lines ${draft.line}–${end}` : `line ${draft.line}`} · {editing ? "editing" : "draft"}
+            {label ?? (end !== draft.line ? `lines ${draft.line}–${end}` : `line ${draft.line}`)} · {editing ? "editing" : "draft"}
           </span>
         </div>
         <textarea
@@ -346,7 +449,7 @@ function Composer({
           value={body}
           rows={Math.min(8, Math.max(2, body.split("\n").length))}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="What should the agent change here? Markdown works."
+          placeholder={label ? "Feedback on this file as a whole… Markdown works." : "What should the agent change here? Markdown works."}
           onKeyDown={(e) => submitOnEnter(e, save, onCancel)}
         />
         <div className="row">

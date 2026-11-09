@@ -16,6 +16,8 @@ export interface TabInfo {
   /** Last activity, unix seconds. */
   updated: number;
   pr: PullRequest | null;
+  /** An agent is waiting for a review (`wart review`). */
+  awaitingReview: boolean;
 }
 
 interface Props {
@@ -109,6 +111,7 @@ export function ProjectTabs(p: Props) {
           {t.linked ? <WorktreeIcon size={13} /> : <Branch size={13} />}
         </span>
         {t.project.name}
+        {t.awaitingReview && <span className="waitdot" title="An agent is waiting for your review" aria-label="Review requested" />}
         {pr && (
           <span
             className={`prpill ${pr.cls}`}

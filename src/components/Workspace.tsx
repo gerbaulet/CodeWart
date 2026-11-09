@@ -11,6 +11,7 @@ import type {
   GraphScope,
   History,
   HistoryMode,
+  PendingReview,
   Peer,
   Project,
   ReviewComment,
@@ -23,7 +24,8 @@ import { DiffView, type ScrollTarget } from "./DiffView";
 import { FilesPane } from "./FilesPane";
 import { FilterBar } from "./FilterBar";
 import { HistoryPane, WORKING, historyKeys } from "./HistoryPane";
-import { ReviewPane } from "./ReviewPane";
+import { ReviewPane, type ReviewSnapshot } from "./ReviewPane";
+import { useReviewArchive } from "../reviewArchive";
 import { Splitter, toggleLeftPane } from "./Splitter";
 import { WorktreeBar } from "./WorktreeBar";
 
@@ -47,6 +49,11 @@ interface Props {
   /** Other repos opened from the same folder. */
   peers: Peer[];
   groupName?: string;
+  /** Stable id of this tab (for review requests). */
+  tabId: string;
+  /** An agent is waiting for a review of this worktree (`wart review`). */
+  reviewRequest?: PendingReview;
+  onReviewDone: (tabId: string) => void;
   onJumpToPeer: (projectId: string, worktree?: string) => void;
   toast: (msg: string, err?: boolean) => void;
 }
@@ -105,6 +112,9 @@ export const Workspace = memo(function Workspace({
   onScope,
   peers,
   groupName,
+  tabId,
+  reviewRequest,
+  onReviewDone,
   onJumpToPeer,
   toast,
 }: Props) {
@@ -121,7 +131,8 @@ export const Workspace = memo(function Workspace({
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [tick, setTick] = useState(0); // bumps when the worktree changes on disk
+  const [tick, setTick] = useState(0); // bumps when the worktree changes on disk (or on refresh)
+  const [diskVersion, setDiskVersion] = useState(0); // bumps only when the worktree changes on disk
   const [graphSel, setGraphSel] = useState<string | null>(null);
   const diffScroller = useRef<HTMLDivElement | null>(null);
 
@@ -209,6 +220,7 @@ export const Workspace = memo(function Workspace({
         if (stopped) return;
         if (lastFp.current !== null && fp !== lastFp.current) {
           setTick((t) => t + 1);
+          setDiskVersion((v) => v + 1);
           onActivity(project.id);
         }
         lastFp.current = fp;
@@ -392,6 +404,20 @@ export const Workspace = memo(function Workspace({
   };
 
   const addComment = useCallback((c: ReviewComment) => setComments((cs) => [...cs, c]), []);
+
+  // ---- review sessions -----------------------------------------------------
+  const archive = useReviewArchive(worktree);
+  /** Archive a handed-over review and clear what it contained (later additions stay). */
+  const archiveReview = useCallback(
+    (snap: ReviewSnapshot, via: "session" | "copy", sentTo?: string) => {
+      const entry = archive.add({ ...snap, at: Date.now(), via, sentTo });
+      const ids = new Set(snap.comments.map((c) => c.id));
+      setComments((cs) => cs.filter((c) => !ids.has(c.id)));
+      setNote((n) => (n.trim() === snap.note.trim() ? "" : n));
+      return entry;
+    },
+    [archive],
+  );
   const removeComment = useCallback((id: string) => setComments((cs) => cs.filter((c) => c.id !== id)), []);
   const updateComment = useCallback(
     (id: string, body: string) => setComments((cs) => cs.map((c) => (c.id === id ? { ...c, body } : c))),
@@ -586,7 +612,7 @@ export const Workspace = memo(function Workspace({
             target={targetLabel}
             comments={comments}
             onRemove={removeComment}
-            onJump={(c) => jumpTo(c.file, c.line, c.side)}
+            onJump={(c) => jumpTo(c.file, c.line || undefined, c.side)}
             onClear={() => {
               setComments([]);
               setNote("");
@@ -594,6 +620,11 @@ export const Workspace = memo(function Workspace({
             note={note}
             onNote={setNote}
             toast={toast}
+            diskVersion={diskVersion}
+            sessions={archive.list}
+            onArchive={archiveReview}
+            request={reviewRequest}
+            onRequestDone={() => onReviewDone(tabId)}
           />
         </div>
       </div>

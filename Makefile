@@ -162,7 +162,7 @@ icons: ## Regenerate app icons from assets/brand/app-icon/codewart-icon-1024.png
 ##@ Install
 
 .PHONY: install
-install: build-app install-app install-cli ## Build and install the app + `wart` CLI
+install: build-app install-app install-cli install-skill ## Build and install the app, `wart` CLI and Claude skill
 
 .PHONY: install-app
 install-app: ## Install the built app (macOS: $(APP_DIR), Linux: $(BIN_DIR))
@@ -184,9 +184,18 @@ install-cli: ## Install the `wart` launcher (and `codewart` alias) into $(BIN_DI
 	@echo "✓ installed $(BIN_DIR)/wart (and codewart)"
 	@case ":$$PATH:" in *":$(BIN_DIR):"*) ;; *) echo "  note: add $(BIN_DIR) to your PATH";; esac
 
+SKILL_DIR ?= $(HOME)/.claude/skills
+
+.PHONY: install-skill
+install-skill: ## Install the codewart-review Claude Code skill into $(SKILL_DIR)
+	mkdir -p "$(SKILL_DIR)/codewart-review"
+	install -m 644 skills/codewart-review/SKILL.md "$(SKILL_DIR)/codewart-review/SKILL.md"
+	@echo "✓ installed Claude skill $(SKILL_DIR)/codewart-review"
+
 .PHONY: uninstall
 uninstall: ## Remove the app and CLI
 	rm -f "$(BIN_DIR)/wart" "$(BIN_DIR)/codewart" "$(BIN_DIR)/codewart-app"
+	rm -rf "$(SKILL_DIR)/codewart-review"
 ifeq ($(UNAME_S),Darwin)
 	rm -rf "$(APP_DIR)/Codewart.app"
 endif

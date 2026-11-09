@@ -80,6 +80,9 @@ export function newId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+/** A comment on a file as a whole (made from the file header), not on lines. */
+export const isFileComment = (c: ReviewComment) => c.line === 0;
+
 /** Compile the review batch into markdown an agent can act on. */
 export function reviewMarkdown(opts: {
   comments: ReviewComment[];
@@ -102,7 +105,11 @@ export function reviewMarkdown(opts: {
     for (const c of list) {
       const range = c.endLine && c.endLine !== c.line ? `${c.line}-${c.endLine}` : `${c.line}`;
       const where = c.side === "old" ? `${file}:${range} (removed line)` : `${file}:${range}`;
-      const title = c.symbol ? `\`${c.symbol}\` in \`${where}\`` : `\`${where}\``;
+      const title = isFileComment(c)
+        ? `\`${file}\` (whole file${c.side === "old" ? ", deleted" : ""})`
+        : c.symbol
+          ? `\`${c.symbol}\` in \`${where}\``
+          : `\`${where}\``;
       out.push("", `${n}. ${title}`);
       if (opts.includeCode && c.code.trim()) {
         const lang = languageOf(file) ?? "";

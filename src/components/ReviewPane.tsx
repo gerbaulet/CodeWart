@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { api, errorMessage } from "../api";
-import type { AgentSession, ReviewComment } from "../types";
-import { reviewMarkdown } from "../util";
+import { formatWhen } from "../reviewArchive";
+import type { AgentSession, PendingReview, ReviewComment, ReviewSession } from "../types";
+import { relativeTime, reviewMarkdown } from "../util";
 import { ChevronDown, Copy, Send } from "./Icons";
 import { Popover } from "./Popover";
 
@@ -16,9 +17,45 @@ interface Props {
   note: string;
   onNote: (s: string) => void;
   toast: (msg: string, err?: boolean) => void;
+  /** Bumps whenever the worktree changes on disk (the agent produced a new version). */
+  diskVersion: number;
+  /** Past review sessions of this worktree, newest first. */
+  sessions: ReviewSession[];
+  /** Archive a handed-over review and clear what it contained. */
+  onArchive: (snap: ReviewSnapshot, via: "session" | "copy", sentTo?: string) => ReviewSession;
+  /** An agent ran `wart review` and is waiting for this review. */
+  request?: PendingReview;
+  onRequestDone: () => void;
 }
 
-export function ReviewPane({ worktree, target, comments, onRemove, onJump, onClear, note, onNote, toast }: Props) {
+/** What the waiting agent receives when there is nothing to change. */
+const APPROVED = "APPROVED: the reviewer looked at the changes and has no further feedback.";
+const DISMISSED = "DISMISSED: the reviewer declined to review right now. Continue without review feedback.";
+
+/** The review exactly as it was handed to the agent. */
+export interface ReviewSnapshot {
+  target: string;
+  comments: ReviewComment[];
+  note: string;
+  markdown: string;
+}
+
+export function ReviewPane({
+  worktree,
+  target,
+  comments,
+  onRemove,
+  onJump,
+  onClear,
+  note,
+  onNote,
+  toast,
+  diskVersion,
+  sessions: past,
+  onArchive,
+  request,
+  onRequestDone,
+}: Props) {
   const [includeCode, setIncludeCode] = useState(true);
   const [preview, setPreview] = useState(false);
   const [submit, setSubmit] = useState(true);
@@ -40,19 +77,45 @@ export function ReviewPane({ worktree, target, comments, onRemove, onJump, onCle
     [comments, note, target, includeCode],
   );
   const empty = comments.length === 0 && !note.trim();
+  const snapshot = (): ReviewSnapshot => ({ target, comments, note, markdown });
 
-  const copy = async () => {
+  // A copied review waits for the agent's next version, then asks to be archived.
+  const [pending, setPending] = useState<{ snap: ReviewSnapshot; version: number } | null>(null);
+  const [openSession, setOpenSession] = useState<number | null>(null);
+
+  const copyText = async (text: string, msg: string) => {
     try {
-      await writeText(markdown);
-      toast("Review copied as markdown");
+      await writeText(text);
     } catch (e) {
       try {
-        await navigator.clipboard.writeText(markdown);
-        toast("Review copied as markdown");
+        await navigator.clipboard.writeText(text);
       } catch {
         toast(errorMessage(e), true);
+        return false;
       }
     }
+    toast(msg);
+    return true;
+  };
+
+  const copy = async () => {
+    const snap = snapshot();
+    if (await copyText(markdown, "Review copied as markdown")) setPending({ snap, version: diskVersion });
+  };
+
+  // Ask only while the copied review is still here (not cleared or already archived).
+  const stillHere =
+    !!pending &&
+    (pending.snap.comments.some((c) => comments.some((x) => x.id === c.id)) ||
+      (!!pending.snap.note.trim() && note.trim() === pending.snap.note.trim()));
+  const askArchive = !!pending && diskVersion > pending.version && stillHere;
+  const nextNumber = (past[0]?.n ?? 0) + 1;
+
+  const archiveCopied = () => {
+    if (!pending) return;
+    const r = onArchive(pending.snap, "copy");
+    setPending(null);
+    toast(`Archived as review #${r.n} · new review started`);
   };
 
   const loadSessions = useCallback(async () => {
@@ -64,13 +127,35 @@ export function ReviewPane({ worktree, target, comments, onRemove, onJump, onCle
     }
   }, [worktree, toast]);
 
+  /** Answer a `wart review` request: the waiting agent prints this and continues. */
+  const reply = async (text: string, archive: boolean) => {
+    if (!request) return;
+    setBusy(true);
+    try {
+      const snap = snapshot();
+      await api.writeReviewReply(request.reply, text);
+      onRequestDone();
+      setPending(null);
+      if (archive) {
+        const r = onArchive(snap, "session", "agent (wart review)");
+        toast(`Review sent to the agent · archived as review #${r.n}`);
+      } else toast(text === APPROVED ? "Approved: the agent continues" : "Review request dismissed");
+    } catch (e) {
+      toast(errorMessage(e), true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const send = async (s: AgentSession) => {
     setPickOpen(false);
     setBusy(true);
     try {
+      const snap = snapshot();
       await api.injectText(s.id, markdown.trimEnd(), submit);
-      toast(`Sent to ${s.label}`);
-      onClear();
+      const r = onArchive(snap, "session", s.label);
+      setPending(null);
+      toast(`Sent to ${s.label} · archived as review #${r.n}`);
     } catch (e) {
       toast(errorMessage(e), true);
     } finally {
@@ -102,13 +187,32 @@ export function ReviewPane({ worktree, target, comments, onRemove, onJump, onCle
           </button>
         </div>
       </div>
+      {request && (
+        <div className="rrequest" role="status">
+          <div className="r1">
+            <span className="waitdot" />
+            <b>The agent is waiting for your review</b>
+            <span className="faint">{relativeTime(request.at / 1000)}</span>
+          </div>
+          {request.message && <p className="msg">{request.message}</p>}
+          <div className="row">
+            <button className="linkbtn" disabled={busy} onClick={() => void reply(APPROVED, false)} title="Tell the agent there is nothing to change">
+              approve, no changes
+            </button>
+            <button className="linkbtn" disabled={busy} onClick={() => void reply(DISMISSED, false)} title="Release the agent without a review">
+              dismiss
+            </button>
+          </div>
+        </div>
+      )}
       {comments.length > 0 && !preview && (
         <div className="clist">
           {comments.map((c) => (
             <div key={c.id} className="citem" onClick={() => onJump(c)}>
               <span className="loc">
                 {c.symbol ? `${c.symbol} · ` : ""}
-                {c.file}:{c.line}
+                {c.file}
+                {c.line > 0 ? `:${c.line}` : " · whole file"}
               </span>
               <button
                 className="rm"
@@ -141,6 +245,22 @@ export function ReviewPane({ worktree, target, comments, onRemove, onJump, onCle
           />
         )}
       </div>
+      {askArchive && (
+        <div className="rprompt" role="alert">
+          <p>
+            The agent made changes since you copied this review. Treat them as the new version and archive this as{" "}
+            <b>review #{nextNumber}</b>?
+          </p>
+          <div className="row">
+            <button className="btn sm pri" onClick={archiveCopied}>
+              Archive &amp; start new review
+            </button>
+            <button className="btn sm" onClick={() => setPending(null)}>
+              Not now
+            </button>
+          </div>
+        </div>
+      )}
       <div className="rfoot">
         <div className="row">
           <label className="chk">
@@ -170,39 +290,78 @@ export function ReviewPane({ worktree, target, comments, onRemove, onJump, onCle
           <button className="btn" onClick={copy} disabled={empty}>
             <Copy size={14} /> Copy
           </button>
-          <div style={{ position: "relative", flex: 1 }}>
-            <button
-              className="btn pri"
-              style={{ width: "100%" }}
-              disabled={empty || busy}
-              onClick={() => {
-                setPickOpen((o) => !o);
-                void loadSessions();
-              }}
-            >
-              <Send size={14} /> Send to session <ChevronDown />
+          {request ? (
+            <button className="btn pri" style={{ flex: 1 }} disabled={empty || busy} onClick={() => void reply(markdown.trimEnd(), true)}>
+              <Send size={14} /> Send to agent
             </button>
-            <Popover open={pickOpen} onClose={() => setPickOpen(false)} align="right" up>
-              <div className="cap">Agent sessions in this worktree</div>
-              {sessions === null && <div className="m" style={{ padding: "8px 12px" }}>Scanning…</div>}
-              {sessions?.length === 0 && (
-                <div className="m" style={{ padding: "8px 12px", whiteSpace: "normal", lineHeight: 1.5 }}>
-                  No tmux, WezTerm or kitty pane is running in this worktree. Use Copy and paste into your agent instead.
-                </div>
-              )}
-              {sessions?.map((s) => (
-                <button key={s.id} className="opt" onClick={() => send(s)}>
-                  <span className="r1">
-                    {s.command || "shell"}
-                    {s.isAgent && <span className="badge added">agent</span>}
-                  </span>
-                  <span className="m">{s.label}</span>
-                </button>
-              ))}
-            </Popover>
-          </div>
+          ) : (
+            <div style={{ position: "relative", flex: 1 }}>
+              <button
+                className="btn pri"
+                style={{ width: "100%" }}
+                disabled={empty || busy}
+                onClick={() => {
+                  setPickOpen((o) => !o);
+                  void loadSessions();
+                }}
+              >
+                <Send size={14} /> Send to session <ChevronDown />
+              </button>
+              <Popover open={pickOpen} onClose={() => setPickOpen(false)} align="right" up>
+                <div className="cap">Agent sessions in this worktree</div>
+                {sessions === null && <div className="m" style={{ padding: "8px 12px" }}>Scanning…</div>}
+                {sessions?.length === 0 && (
+                  <div className="m" style={{ padding: "8px 12px", whiteSpace: "normal", lineHeight: 1.5 }}>
+                    No tmux, WezTerm or kitty pane is running in this worktree. Use Copy and paste into your agent instead.
+                  </div>
+                )}
+                {sessions?.map((s) => (
+                  <button key={s.id} className="opt" onClick={() => send(s)}>
+                    <span className="r1">
+                      {s.command || "shell"}
+                      {s.isAgent && <span className="badge added">agent</span>}
+                    </span>
+                    <span className="m">{s.label}</span>
+                  </button>
+                ))}
+              </Popover>
+            </div>
+          )}
         </div>
       </div>
+      {past.length > 0 && (
+        <div className="rhist" aria-label="Past reviews">
+          <div className="cap">Past reviews</div>
+          {past.map((r) => {
+            const open = openSession === r.n;
+            const count = r.comments.length;
+            return (
+              <div key={r.n} className={`rh${open ? " open" : ""}`}>
+                <button className="rh-row" onClick={() => setOpenSession(open ? null : r.n)} aria-expanded={open}>
+                  <b>#{r.n}</b>
+                  <span>{formatWhen(r.at)}</span>
+                  <span className="grow" />
+                  <span className="faint" title={`${count} comment${count === 1 ? "" : "s"}`}>
+                    {count} · {r.via === "session" ? "sent" : "copied"}
+                  </span>
+                </button>
+                {open && (
+                  <div className="rh-body">
+                    <div className="m">
+                      {r.target}
+                      {r.sentTo ? ` · sent to ${r.sentTo}` : " · copied & pasted"}
+                    </div>
+                    <pre>{r.markdown.trimEnd()}</pre>
+                    <button className="linkbtn" onClick={() => void copyText(r.markdown, `Review #${r.n} copied`)}>
+                      copy again
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }

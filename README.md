@@ -94,6 +94,20 @@ Click any line in the diff to comment; drag over line numbers or shift-click for
 * **Copy**: the compiled markdown (file:line, optional code snippet, comment) goes to the clipboard, ready to paste anywhere.
 * **Send to session**: Codewart finds terminal panes whose working directory is inside the worktree in **tmux**, **WezTerm** or **kitty** (with `allow_remote_control`), puts agent panes (Claude Code, Codex, Aider, Gemini…) first, and pastes the review there. "Press Enter after send" submits it.
 
+### Reviews requested by the agent (`wart review`)
+
+An agent can ask for your review and wait for it, in any terminal:
+
+```sh
+wart review -m "Added token rotation; check the expiry math" [--timeout SECS] [PATH]
+```
+
+Codewart opens the worktree (without stealing focus; the Dock icon bounces), marks its tab with a pulsing dot and shows the agent's message above the review. **Send to agent** hands the review to the waiting command, which prints it and exits 0. The review is archived as a numbered session. **Approve, no changes** and **dismiss** release the agent with `APPROVED: …` / `DISMISSED: …`. With `--timeout` the command exits 3 if nothing arrived yet; running it again keeps waiting on the same request.
+
+**Claude Code skill:** `make install` (or `make install-skill`) installs `skills/codewart-review` into `~/.claude/skills`. It teaches Claude to run `wart review` when you ask for a review (or review rounds), to re-run it past the Bash tool's 10-minute limit, and to address every comment. Try: *"implement X, then get my review in Codewart"*.
+
+Under the hood the request and reply go through `$TMPDIR/codewart-reviews/review-<id>.md` (one per worktree). `wart review` is available with the macOS/Linux launcher.
+
 ### Follow agent
 
 With **Follow agent** on, Codewart polls the worktree (HEAD + `git status` + file mtimes) every 1.5 s. It reloads when anything changes and jumps to the newest commit or the uncommitted work.

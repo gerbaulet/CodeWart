@@ -6,6 +6,7 @@ mod diff;
 mod discover;
 mod git;
 mod pr;
+mod review;
 mod session;
 
 #[cfg(test)]
@@ -18,6 +19,10 @@ use tauri::{Emitter, Manager};
 /// Paths passed on the command line, consumed by the UI on startup.
 #[derive(Default)]
 struct LaunchPaths(Mutex<Vec<String>>);
+
+/// A `wart review` request passed on the command line at startup.
+#[derive(Default)]
+struct LaunchReview(Mutex<Option<review::ReviewRequest>>);
 
 /// Turn CLI arguments into absolute project paths. No argument = cwd.
 fn paths_from_args(args: &[String], cwd: &Path) -> Vec<String> {
@@ -57,6 +62,29 @@ async fn blocking<T: Send + 'static>(
 #[tauri::command]
 fn launch_paths(state: tauri::State<LaunchPaths>) -> Vec<String> {
     std::mem::take(&mut *state.0.lock().unwrap())
+}
+
+#[tauri::command]
+fn launch_review(state: tauri::State<LaunchReview>) -> Option<review::ReviewRequest> {
+    state.0.lock().unwrap().take()
+}
+
+#[tauri::command]
+fn review_waiting(reply: String) -> bool {
+    review::is_waiting(&reply)
+}
+
+#[tauri::command]
+fn write_review_reply(reply: String, text: String) -> Result<(), String> {
+    review::write_reply(&reply, &text)
+}
+
+/// Bounce the Dock icon / flash the taskbar without stealing focus.
+#[tauri::command]
+fn request_attention(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.request_user_attention(Some(tauri::UserAttentionType::Informational));
+    }
 }
 
 #[tauri::command]
@@ -155,13 +183,14 @@ pub fn run() {
         return;
     }
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("codewart {}\n\nUsage: wart [PATH...]   (or codewart [PATH...])\n\nOpens the git project, worktree, or folder of repositories at PATH\n(default: current directory).\nIf codewart is already running the project opens as a new tab.\n\nEnvironment:\n  CODEWART_EDITOR    editor command (default: first of cursor, code, zed, subl …)\n  CODEWART_TERMINAL  terminal app/command for \"open in terminal\"", env!("CARGO_PKG_VERSION"));
+        println!("codewart {}\n\nUsage: wart [PATH...]   (or codewart [PATH...])\n\nOpens the git project, worktree, or folder of repositories at PATH\n(default: current directory).\nIf codewart is already running the project opens as a new tab.\n\n       wart review [-m MESSAGE] [--timeout SECS] [PATH]\n\nAsks for a review of the worktree at PATH in Codewart and waits; prints the\nreview when you send it (exit 3 if --timeout passes first).\n\nEnvironment:\n  CODEWART_EDITOR    editor command (default: first of cursor, code, zed, subl …)\n  CODEWART_TERMINAL  terminal app/command for \"open in terminal\"", env!("CARGO_PKG_VERSION"));
         return;
     }
     if std::env::var_os("TERM").is_none() {
         actions::fix_path_env();
     }
     let initial = paths_from_args(&args, &launch_cwd());
+    let initial_review = review::from_args(&args, &initial);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
@@ -170,7 +199,13 @@ pub fn run() {
             } else {
                 PathBuf::from(cwd)
             };
-            for p in paths_from_args(&argv, &cwd) {
+            let paths = paths_from_args(&argv, &cwd);
+            // A review request opens its worktree itself and doesn't steal focus.
+            if let Some(req) = review::from_args(&argv, &paths) {
+                let _ = app.emit("review-request", req);
+                return;
+            }
+            for p in paths {
                 let _ = app.emit("open-path", p);
             }
             if let Some(w) = app.get_webview_window("main") {
@@ -181,8 +216,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(LaunchPaths(Mutex::new(initial)))
+        .manage(LaunchReview(Mutex::new(initial_review)))
         .invoke_handler(tauri::generate_handler![
             launch_paths,
+            launch_review,
+            review_waiting,
+            write_review_reply,
+            request_attention,
             discover,
             open_project,
             cli_status,

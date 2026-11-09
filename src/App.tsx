@@ -6,7 +6,7 @@ import { api, errorMessage } from "./api";
 import { Logo } from "./components/Icons";
 import { ProjectTabs, type TabInfo, type ThemePref } from "./components/ProjectTabs";
 import { Workspace } from "./components/Workspace";
-import type { CliStatus, Editor, Filters, GraphScope, Peer, Project, PullRequest, View } from "./types";
+import type { CliStatus, Editor, Filters, GraphScope, Peer, PendingReview, Project, PullRequest, ReviewRequest, View } from "./types";
 import { isMac, tildify } from "./util";
 
 /** One tab per repo + worktree, so a repo can be open on several worktrees at once. */
@@ -187,7 +187,9 @@ export default function App() {
       for (const s of saved) await openRepo(s.path, { activate: false, worktree: s.worktree, quiet: true });
       if (savedActive) setActiveId((a) => a ?? savedActive);
       const launch = await api.launchPaths().catch(() => [] as string[]);
-      for (const p of launch) await openPath(p);
+      const launchReview = await api.launchReview().catch(() => null);
+      for (const p of launch) if (p !== launchReview?.path) await openPath(p);
+      if (launchReview) await onReviewRequestRef.current(launchReview);
       setTabs((ts) => {
         setActiveId((a) => (a && ts.some((t) => tabId(t.project.id, t.worktree) === a) ? a : ts[0] ? tabId(ts[0].project.id, ts[0].worktree) : null));
         return ts;
@@ -202,6 +204,49 @@ export default function App() {
       void un.then((f) => f());
     };
   }, [openPath]);
+
+  // ---- review requests from agents (`wart review`) -----------------------------
+  const [reviews, setReviews] = useState<Record<string, PendingReview>>({});
+  const reviewsRef = useRef(reviews);
+  reviewsRef.current = reviews;
+  const onReviewRequest = useCallback(
+    async (r: ReviewRequest) => {
+      const id = await openRepo(r.path, { activate: false });
+      if (!id) return;
+      const known = reviewsRef.current[id]?.reply === r.reply;
+      setReviews((m) => ({ ...m, [id]: { reply: r.reply, message: r.message ?? "", at: known ? m[id].at : Date.now() } }));
+      if (known) return; // the agent re-ran after --timeout: same request
+      setActiveId((a) => a ?? id);
+      const t = tabsRef.current.find((x) => tabId(x.project.id, x.worktree) === id);
+      toast(`Review requested${t ? ` for ${t.project.name}` : ""}`);
+      void api.requestAttention().catch(() => {});
+    },
+    [openRepo, toast],
+  );
+  const onReviewRequestRef = useRef(onReviewRequest);
+  onReviewRequestRef.current = onReviewRequest;
+  useEffect(() => {
+    const un = listen<ReviewRequest>("review-request", (e) => void onReviewRequestRef.current(e.payload));
+    return () => {
+      void un.then((f) => f());
+    };
+  }, []);
+  const reviewDone = useCallback((id: string) => setReviews(({ [id]: _, ...rest }) => rest), []);
+  // Drop requests whose agent stopped waiting (cancelled, or never came back after --timeout).
+  useEffect(() => {
+    const ids = Object.keys(reviews);
+    if (!ids.length) return;
+    const t = window.setInterval(() => {
+      for (const [id, r] of Object.entries(reviewsRef.current)) {
+        void api.reviewWaiting(r.reply).then((alive) => {
+          if (alive || reviewsRef.current[id]?.reply !== r.reply) return;
+          reviewDone(id);
+          toast("The agent stopped waiting for the review");
+        });
+      }
+    }, 5000);
+    return () => window.clearInterval(t);
+  }, [reviews, reviewDone, toast]);
 
   // Stable callbacks: Workspace is memoised, so inline lambdas would make every
   // open (hidden) project re-render on each tab switch.
@@ -324,9 +369,10 @@ export default function App() {
           linked: !w?.isMain,
           updated: w?.updated ?? 0,
           pr: w?.branch ? prs[prKey(t.project.id, w.branch)] ?? null : null,
+          awaitingReview: !!reviews[tabId(t.project.id, t.worktree)],
         };
       }),
-    [tabs, prs],
+    [tabs, prs, reviews],
   );
 
   // Other repos on the same branch, per tab (stable arrays for memoised workspaces).
@@ -392,6 +438,9 @@ export default function App() {
           onScope={setScope}
           peers={peers.get(t.id) ?? NO_PEERS}
           groupName={t.group.label}
+          tabId={t.id}
+          reviewRequest={reviews[t.id]}
+          onReviewDone={reviewDone}
           onJumpToPeer={jumpToPeer}
           toast={toast}
         />
