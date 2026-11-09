@@ -22,6 +22,61 @@ wart ../other       # if Codewart is already running, opens as a new tab
 
 `codewart` is installed as an alias of `wart`.
 
+## Using Codewart with coding agents
+
+Codewart works with any coding agent that edits a git checkout (Claude Code, Codex, Aider, Gemini CLI, Cursor's agent …). Agents learn how to use it from `wart agent`, which prints [`docs/agents.md`](docs/agents.md).
+
+### Recommended setup
+
+1. **One worktree per agent task.** `git worktree add ../api.login -b feat/login`, then start the agent there. Codewart groups tabs by branch, so related repos on the same feature branch sit together, and you can review one agent while others keep working.
+2. **Open it with Follow agent on.** Run `wart .` in the worktree. Codewart jumps to each new commit or uncommitted edit as the agent makes it.
+3. **Review in rounds:** read the diff (hide tests and noise with the filters), check the call chain for new functions and who calls them, and comment on lines, functions or whole files.
+4. **Hand the review back.** Either let the agent ask for it (below), use **Send to session** (agent running in tmux, WezTerm or kitty), or **Copy** and paste. Every handed-over review is archived as a numbered session in the review pane.
+
+### Let the agent ask for your review
+
+`wart review` blocks until you send your review in Codewart, then prints it, so the agent can work in review rounds without any terminal integration.
+
+**Claude Code: install the skill.** `make install` (or `make install-skill`) copies [`skills/codewart-review`](skills/codewart-review/SKILL.md) to `~/.claude/skills`. A shortened version of what it tells Claude:
+
+```markdown
+---
+name: codewart-review
+description: Ask the user to review your code changes in Codewart and wait for their feedback,
+  then address it. Use when the user asks for their review or for review rounds.
+---
+
+1. Finish a coherent piece of work, then run (Bash tool, timeout 600000):
+   wart review --timeout 570 -m "<what you changed, what deserves a close look>"
+2. Exit 3 means no review yet: run the same command again. Exit 0: the review is on stdout.
+3. APPROVED → continue. DISMISSED → continue without feedback.
+   Otherwise address every numbered comment (find code by its quoted snippet if lines moved)
+   and summarise your changes per comment number. Request the next round the same way.
+```
+
+Then prompt it like this:
+
+- *"Implement token rotation in `src/session.ts`, then get my review in Codewart and address it."*
+- *"Fix the flaky login test. Work in review rounds with me in Codewart until I approve."*
+- *"Refactor the router; ask for my review after each step."*
+
+**Other agents: add a few lines to the repo's `AGENTS.md`** (or `CLAUDE.md`, `GEMINI.md`, `CONVENTIONS.md` …):
+
+```markdown
+## Code review
+When you finish a task, run `wart review -m "<what changed, what to check>"` and wait for my review
+(re-run it if it exits 3). Address every comment it prints, then ask for the next review.
+If it prints APPROVED, you're done. Run `wart agent` for details.
+```
+
+### Tips
+
+- **Tell the agent what to look at.** The `-m` message is shown above the review. "Changed the retry logic; the backoff math in `retry.ts:40` is the risky part" leads to a faster, better review.
+- **Approve when there's nothing to fix.** "approve, no changes" releases the agent with `APPROVED`; "dismiss" releases it without feedback.
+- **Comment at the right level:** a line for local fixes, a function (from the call chain) for design issues, the whole file for structure or naming.
+- **Use the review history.** Past sessions show exactly what you asked for in each round, which helps check that every comment was addressed.
+- **Watch the PR pill:** tabs show the branch's GitHub PR and its state (via `gh`), so you can see what is already up for review.
+
 ## Installing on other machines
 
 Tauri builds native installers per OS (it can't cross-compile):
