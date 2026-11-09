@@ -155,11 +155,13 @@ mod tests {
 
     #[test]
     fn only_writes_launcher_reply_files() {
-        assert!(checked("/etc/passwd").is_err());
-        assert!(checked("/tmp/codewart-reviews/notes.md").is_err());
-        assert!(checked("/tmp/other/review-1.md").is_err());
-        assert!(checked("codewart-reviews/review-1.md").is_err());
-        assert!(checked("/tmp/codewart-reviews/review-1.md").is_ok());
+        let tmp = std::env::temp_dir();
+        let p = |rel: &str| tmp.join(rel).to_string_lossy().into_owned();
+        assert!(checked(&p("passwd")).is_err());
+        assert!(checked(&p("codewart-reviews/notes.md")).is_err());
+        assert!(checked(&p("other/review-1.md")).is_err());
+        assert!(checked("codewart-reviews/review-1.md").is_err(), "relative");
+        assert!(checked(&p("codewart-reviews/review-1.md")).is_ok());
     }
 
     #[test]
