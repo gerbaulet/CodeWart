@@ -280,6 +280,8 @@ pub struct Commit {
     pub additions: u32,
     pub deletions: u32,
     pub files: u32,
+    /// Came in through a merge from another branch (not on this branch's own line).
+    pub foreign: bool,
 }
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -333,9 +335,17 @@ fn parse_log(out: &str) -> Vec<Commit> {
             additions: adds,
             deletions: dels,
             files,
+            foreign: false,
         });
     }
     commits
+}
+
+fn range_of(base: &Option<Commit>) -> String {
+    match base {
+        Some(b) => format!("{}..HEAD", b.sha),
+        None => "HEAD".to_string(),
+    }
 }
 
 pub fn history(dir: &Path) -> Result<History, String> {
@@ -361,6 +371,20 @@ pub fn history(dir: &Path) -> Result<History, String> {
                 dir,
                 &["log", "-M", "--numstat", LOG_FORMAT, "-n", "60", "HEAD"],
             )?);
+        }
+    }
+    // Commits that arrived through merges (another branch's work).
+    if commits.iter().any(|c| c.parents.len() > 1) {
+        let own: std::collections::HashSet<String> = git(
+            dir,
+            &["rev-list", "--first-parent", "-n", "1000", &range_of(&base)],
+        )
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_string)
+        .collect();
+        for c in &mut commits {
+            c.foreign = !own.contains(&c.sha);
         }
     }
     let working = working_stats(dir, head.is_some());

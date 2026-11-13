@@ -1,4 +1,5 @@
 mod actions;
+mod attribution;
 mod callgraph;
 mod classify;
 mod cli;
@@ -133,6 +134,15 @@ async fn diff(
 }
 
 #[tauri::command]
+async fn attribution(
+    worktree: String,
+    selection: diff::Selection,
+    options: diff::DiffOptions,
+) -> Result<attribution::Attribution, String> {
+    blocking(move || attribution::attribute(Path::new(&worktree), &selection, &options)).await
+}
+
+#[tauri::command]
 async fn call_graph(
     worktree: String,
     selection: diff::Selection,
@@ -255,6 +265,7 @@ pub fn run() {
             launch_paths,
             launch_review,
             review_waiting,
+            attribution,
             write_review_reply,
             review_alert,
             discover,

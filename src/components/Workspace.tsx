@@ -1,7 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "../api";
 import type {
+  Attribution,
   CallGraph,
+  CommitBadge,
   DiffResult,
   Editor,
   FileDiff,
@@ -19,6 +21,8 @@ import type {
   View,
 } from "../types";
 import { hiddenReason, newId, tildify } from "../util";
+import { TONES, attributeFiles } from "../commits";
+import { FindBar } from "./FindBar";
 import { CallGraphView } from "./CallGraphView";
 import { DiffView, type ScrollTarget } from "./DiffView";
 import { FilesPane } from "./FilesPane";
@@ -134,7 +138,12 @@ export const Workspace = memo(function Workspace({
   const [tick, setTick] = useState(0); // bumps when the worktree changes on disk (or on refresh)
   const [diskVersion, setDiskVersion] = useState(0); // bumps only when the worktree changes on disk
   const [graphSel, setGraphSel] = useState<string | null>(null);
+  const [attr, setAttr] = useState<{ key: string; data: Attribution } | null>(null);
+  /** Commits whose changes are hidden from the diff (deselected in the history). */
+  const [excluded, setExcluded] = useState<Set<string>>(() => new Set());
+  const [findOpen, setFindOpen] = useState<{ q: string; n: number } | null>(null);
   const diffScroller = useRef<HTMLDivElement | null>(null);
+  const centerRef = useRef<HTMLElement | null>(null);
 
   // ---- back navigation ---------------------------------------------------
   const navStack = useRef<NavState[]>([]);
@@ -299,6 +308,29 @@ export const Workspace = memo(function Workspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [worktree, selKey, filters.ignoreWhitespace, tick]);
 
+  // Which commit each changed line came from, when the selection spans several.
+  const commitOf = useMemo(() => new Map(history?.commits.map((c) => [c.sha, c]) ?? []), [history]);
+  const multi =
+    !!selection &&
+    (selection.kind === "range" ||
+      (selection.kind === "branch" && keys.length > 1) ||
+      (selection.kind === "commit" && (commitOf.get(selection.sha)?.parents.length ?? 0) > 1));
+  const attrReq = useRef(0);
+  useEffect(() => {
+    if (!multi || !selection || !active) return;
+    if (attr?.key === `${wantDiff}|${tick}`) return;
+    const id = ++attrReq.current;
+    const key = `${wantDiff}|${tick}`;
+    api
+      .attribution(worktree, selection, filters.ignoreWhitespace)
+      .then((a) => id === attrReq.current && setAttr({ key, data: a }))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multi, active, worktree, selKey, filters.ignoreWhitespace, tick]);
+  // Attribution of an older load still fits while the new one is computed,
+  // as long as the selection is the same.
+  const attribution = multi && attr && attr.key.startsWith(`${wantDiff}|`) ? attr.data : null;
+
   const graphReq = useRef(0);
   const graphTick = useRef(-1);
   useEffect(() => {
@@ -324,16 +356,55 @@ export const Workspace = memo(function Workspace({
   }, [active, view, worktree, selKey, scope, tick]);
 
   // ---- filtering ---------------------------------------------------------
+  /** Merged-in commits plus the merges that brought them (hidden by "Hide merged-in"). */
+  const foreign = useMemo(() => {
+    const s = new Set(attribution?.foreign ?? []);
+    for (const c of history?.commits ?? []) if (c.foreign || c.parents.length > 1) s.add(c.sha);
+    return s;
+  }, [attribution, history]);
+  const hasForeign = !!history?.commits.some((c) => c.foreign);
+  // A commit picked on its own is never hidden (a merge then shows what it brought in).
+  const picked = selection?.kind === "commit" ? selection.sha : null;
+  const isHidden = useCallback(
+    (sha: string) => sha !== picked && (excluded.has(sha) || (!!filters.hideForeign && foreign.has(sha))),
+    [excluded, filters.hideForeign, foreign, picked],
+  );
+  const commitBadges = useMemo(() => {
+    if (!attribution) return null;
+    const m = new Map<string, CommitBadge>();
+    attribution.commits.forEach((sha, i) => {
+      const c = commitOf.get(sha);
+      m.set(sha, {
+        sha,
+        short: sha === WORKING ? "uncommitted" : c?.short ?? sha.slice(0, 7),
+        subject: sha === WORKING ? "" : c?.subject ?? "",
+        foreign: foreign.has(sha),
+        hidden: isHidden(sha),
+        tone: i % TONES,
+      });
+    });
+    return m;
+  }, [attribution, commitOf, foreign, isHidden]);
+  const attributed = useMemo(
+    () => attributeFiles(diff?.files ?? [], attribution, isHidden, (sha) => foreign.has(sha)),
+    [diff, attribution, isHidden, foreign],
+  );
+
   const { visible, hidden } = useMemo(() => {
     const visible: FileDiff[] = [];
     const hidden: { file: FileDiff; reason: FileTag }[] = [];
-    for (const f of diff?.files ?? []) {
+    for (const d of attributed.dropped) {
+      hidden.push(d);
+      if (showHidden) visible.push(d.file);
+    }
+    for (const f of attributed.files) {
       const r = hiddenReason(f, filters);
       if (r) hidden.push({ file: f, reason: r });
       if (!r || showHidden) visible.push(f);
     }
+    if (attributed.dropped.length) visible.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
     return { visible, hidden };
-  }, [diff, filters, showHidden]);
+  }, [attributed, filters, showHidden]);
 
   const initialLoad = useDelayed(!error && history === null, 120);
   const diffLoading = useDelayed(!error && !!selection && diffKey !== wantDiff, 120);
@@ -445,6 +516,50 @@ export const Workspace = memo(function Workspace({
     toast("Added to review");
   };
 
+  // ---- commits ------------------------------------------------------------
+  /** Move through the history (j/k, ↑/↓); `extend` grows the range instead. */
+  const step = (delta: number, extend: boolean) => {
+    if (!keys.length) return;
+    const cur = pick ? keys.indexOf(pick.b) : -1;
+    const next = Math.min(keys.length - 1, Math.max(0, cur + delta));
+    if (keys[next] === pick?.b && mode !== "all") return;
+    pushNav();
+    if (extend && pick) {
+      setMode("range");
+      setPick({ a: pick.a, b: keys[next] });
+      setFollow(false);
+      return;
+    }
+    if (mode === "all") setMode("single");
+    setPick({ a: keys[next], b: keys[next] });
+    setFollow(next === 0 && follow);
+  };
+  const toggleExcluded = useCallback((sha: string, hide?: boolean) => {
+    setExcluded((s) => {
+      const n = new Set(s);
+      if (hide ?? !n.has(sha)) n.add(sha);
+      else n.delete(sha);
+      return n;
+    });
+  }, []);
+  /** From a commit badge on a diff line. */
+  const onCommit = (sha: string, action: "only" | "hide" | "show") => {
+    if (action === "only") {
+      pushNav();
+      setMode("single");
+      setPick({ a: sha, b: sha });
+      setFollow(false);
+      return;
+    }
+    if (action === "hide" && foreign.has(sha) && !excluded.has(sha) && !filters.hideForeign && hasForeign) {
+      toast("Tip: “Hide merged-in” hides all code from other branches");
+    }
+    toggleExcluded(sha, action === "hide");
+  };
+  const onCommitRef = useRef(onCommit);
+  onCommitRef.current = onCommit;
+  const stableOnCommit = useCallback((sha: string, a: "only" | "hide" | "show") => onCommitRef.current(sha, a), []);
+
   // ---- keyboard ----------------------------------------------------------
   useEffect(() => {
     if (!active) return;
@@ -456,6 +571,13 @@ export const Workspace = memo(function Workspace({
         goBack();
         return;
       }
+      // ⌥F / ⌘F: find in the diff, starting from the selected text.
+      if (e.code === "KeyF" && (e.altKey || e.metaKey || e.ctrlKey) && !e.shiftKey) {
+        e.preventDefault();
+        const picked = window.getSelection()?.toString().split("\n")[0].trim() ?? "";
+        setFindOpen((f) => ({ q: picked || f?.q || "", n: (f?.n ?? 0) + 1 }));
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "b") {
         e.preventDefault();
         toggleLeftPane();
@@ -463,14 +585,7 @@ export const Workspace = memo(function Workspace({
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "j" || e.key === "k") {
-        if (!keys.length) return;
-        const cur = pick ? keys.indexOf(pick.b) : -1;
-        const next = Math.min(keys.length - 1, Math.max(0, cur + (e.key === "j" ? 1 : -1)));
-        if (keys[next] === pick?.b && mode !== "all") return;
-        pushNav();
-        if (mode === "all") setMode("single");
-        setPick({ a: keys[next], b: keys[next] });
-        setFollow(next === 0 && follow);
+        step(e.key === "j" ? 1 : -1, false);
       } else if (e.key === "[" || e.key === "]") {
         if (!visible.length) return;
         const cur = visible.findIndex((f) => f.path === activeFile);
@@ -527,6 +642,7 @@ export const Workspace = memo(function Workspace({
         groupName={groupName}
         currentName={project.name}
         onJumpToPeer={onJumpToPeer}
+        hasForeign={hasForeign}
       />
       <div className="stage">
         {initialLoad && <Overlay wide label={`Opening ${project.name}…`} />}
@@ -540,7 +656,12 @@ export const Workspace = memo(function Workspace({
             if (m === "single" && pick) setPick({ a: pick.b, b: pick.b });
           }}
           selected={mode === "all" ? keys : selectedKeys}
+          cursor={mode === "all" ? null : pick?.b ?? null}
           onPick={onPick}
+          onStep={step}
+          excluded={excluded}
+          onExclude={toggleExcluded}
+          hideForeign={!!filters.hideForeign}
           follow={follow}
           onFollow={(f) => {
             setFollow(f);
@@ -551,8 +672,17 @@ export const Workspace = memo(function Workspace({
           }}
         />
         <Splitter size="--left-w" axis="x" sign={1} label="Resize history" />
-        <main className="center fl">
+        <main className="center fl" ref={centerRef}>
           {loading > 0 && <div className="loading-bar" />}
+          {findOpen && (
+            <FindBar
+              key={findOpen.n}
+              initial={findOpen.q}
+              root={() => centerRef.current?.querySelector<HTMLElement>(".viewpane:not([hidden])") ?? null}
+              version={`${view}|${wantDiff}|${tick}|${visible.length}|${[...excluded].join()}`}
+              onClose={() => setFindOpen(null)}
+            />
+          )}
           {!initialLoad && (view === "diff" ? diffLoading : graphLoading) && (
             <Overlay label={view === "diff" ? "Loading diff…" : "Analysing call chain…"} />
           )}
@@ -577,6 +707,8 @@ export const Workspace = memo(function Workspace({
                     sendLabel={`${comments.length} in batch`}
                     scrollRef={diffScroller}
                     loadFile={loadFile}
+                    commits={commitBadges}
+                    onCommit={stableOnCommit}
                   />
                 ) : null}
               </div>
@@ -614,6 +746,8 @@ export const Workspace = memo(function Workspace({
           <Splitter size="--files-h" axis="y" sign={1} label="Resize file list" />
           <ReviewPane
             worktree={worktree}
+            repoName={project.name}
+            tabId={tabId}
             target={targetLabel}
             comments={comments}
             onRemove={removeComment}
@@ -637,7 +771,8 @@ export const Workspace = memo(function Workspace({
         <span>{tildify(worktree)}</span>
         <span className="grow" />
         <span>⌘B sidebar</span>
-        <span>j/k history</span>
+        <span>↑↓ j/k history</span>
+        <span>⌥F find</span>
         <span>[ ] files</span>
         <span>v toggle view</span>
         {related.length > 0 && <span>` next repo</span>}

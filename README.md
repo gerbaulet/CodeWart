@@ -132,7 +132,13 @@ Next to the Back button, the other repos of the group appear as pills. Clicking 
 * **Hide non-functional**: lockfiles, assets and binaries, generated or minified code, docs, editor/tool config, pure renames, and files where only whitespace or only comments changed.
 * **Ignore whitespace**: passes `-w` to git, so indentation-only hunks disappear inside the files that remain.
 
+* **Hide merged-in** (shown when the branch has merges): hides code that came in through merges from other branches. Those commits are marked *merged in* in the history.
+
 Hidden files are listed under the file list with the reason each was hidden, and you can bring them back.
+
+### Which commit is this?
+
+When the selection spans several commits (a range, `all`, or a merge), each run of changed lines is labelled with the commit it came from (via `git blame`) and gets that commit's colour in the gutter. From the label: **only this** shows just that commit, **hide** removes its changes from the diff. In the history every commit of the selection has a checkbox (or ⌘-click the row) to hide or show its changes.
 
 ### Call chain
 
@@ -159,6 +165,8 @@ wart review -m "Added token rotation; check the expiry math" [--timeout SECS] [P
 
 CodeWart opens the worktree (without stealing focus; the Dock icon bounces), marks its tab with a pulsing dot and shows the agent's message above the review. **Send to agent** hands the review to the waiting command, which prints it and exits 0. The review is archived as a numbered session. **Approve, no changes** and **dismiss** release the agent with `APPROVED: …` / `DISMISSED: …`. With `--timeout` the command exits 3 if nothing arrived yet; running it again keeps waiting on the same request.
 
+Run it from a folder that holds several repos (for example one feature's worktrees of `api/` and `web/`) and a single request covers all of them: every repo's tab shows it, and sending from any of them hands the agent one review with a section per repo.
+
 **Claude Code skill:** `make install` (or `make install-skill`) installs `skills/codewart-review` into `~/.claude/skills`. It teaches Claude to run `wart review` when you ask for a review (or review rounds), to re-run it past the Bash tool's 10-minute limit, and to address every comment. Try: *"implement X, then get my review in CodeWart"*.
 
 **Any agent:** `wart agent` prints [`docs/agents.md`](docs/agents.md), a guide for coding agents (what CodeWart is for, the commands, the review format and an AGENTS.md snippet). `wart --help` points to it, and the landing page serves the same file as `llms.txt`.
@@ -173,7 +181,9 @@ With **Follow agent** on, CodeWart polls the worktree (HEAD + `git status` + fil
 
 | Key | Action |
 | --- | --- |
-| `j` / `k` | next / previous commit |
+| `j` / `k`, `↓` / `↑` (history focused) | next / previous commit; `⇧↓` / `⇧↑` grow a range |
+| `⌥F` / `⌘F` | find in the diff (starts with the selected text); `⏎` / `⇧⏎` next / previous match |
+| `⌘B` | show / hide the history |
 | `[` / `]` | previous / next file |
 | `v` | toggle diff / call chain |
 | `r` | refresh |

@@ -21,6 +21,8 @@ export const TAG_LABEL: Record<FileTag, string> = {
   rename: "rename only",
   whitespace: "whitespace only",
   comments: "comments only",
+  commit: "hidden commit",
+  merged: "merged in",
 };
 
 /** Why a file is hidden under the current filters, or null if visible. */

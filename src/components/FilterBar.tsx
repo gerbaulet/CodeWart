@@ -17,6 +17,8 @@ interface Props {
   /** Name of the repo this workspace shows (label of the rotate pill). */
   currentName: string;
   onJumpToPeer: (projectId: string, worktree?: string) => void;
+  /** The branch contains work merged in from other branches. */
+  hasForeign?: boolean;
 }
 
 function Pill({ on, label, onClick, tip }: { on: boolean; label: string; onClick: () => void; tip: string }) {
@@ -28,7 +30,7 @@ function Pill({ on, label, onClick, tip }: { on: boolean; label: string; onClick
   );
 }
 
-export function FilterBar({ filters, onFilters, hiddenCount, editor, onEditor, onTerminal, onReveal, canBack, onBack, related, groupName, currentName, onJumpToPeer }: Props) {
+export function FilterBar({ filters, onFilters, hiddenCount, editor, onEditor, onTerminal, onReveal, canBack, onBack, related, groupName, currentName, onJumpToPeer, hasForeign }: Props) {
   const toggle = (k: keyof Filters) => onFilters({ ...filters, [k]: !filters[k] });
   return (
     <div className="filterbar">
@@ -80,6 +82,14 @@ export function FilterBar({ filters, onFilters, hiddenCount, editor, onEditor, o
         <span className="m" style={{ marginRight: 6 }}>
           {hiddenCount} file{hiddenCount === 1 ? "" : "s"} hidden
         </span>
+      )}
+      {(hasForeign || filters.hideForeign) && (
+        <Pill
+          on={!!filters.hideForeign}
+          label="Hide merged-in"
+          onClick={() => toggle("hideForeign")}
+          tip="Hide code that came in through merges from other branches (marked “merged in” in the history)"
+        />
       )}
       <Pill
         on={filters.hideTests}

@@ -211,14 +211,30 @@ export default function App() {
   reviewsRef.current = reviews;
   const onReviewRequest = useCallback(
     async (r: ReviewRequest) => {
-      const id = await openRepo(r.path, { activate: false });
-      if (!id) return;
-      const known = reviewsRef.current[id]?.reply === r.reply;
-      setReviews((m) => ({ ...m, [id]: { reply: r.reply, message: r.message ?? "", at: known ? m[id].at : Date.now() } }));
+      // A folder of repos (e.g. one feature's worktrees): one request for all of them.
+      const d = await api.discover(r.path).catch(() => null);
+      const group = d?.kind === "group" ? { name: d.name, repos: d.repos.length } : undefined;
+      const ids: string[] = [];
+      for (const repo of d?.kind === "group" ? d.repos : [r.path]) {
+        const id = await openRepo(repo, { activate: false, worktree: group ? repo : undefined });
+        if (id) ids.push(id);
+      }
+      if (!ids.length) return;
+      const known = ids.some((id) => reviewsRef.current[id]?.reply === r.reply);
+      setReviews((m) => {
+        const next = { ...m };
+        const at = ids.map((id) => m[id]).find((x) => x?.reply === r.reply)?.at ?? Date.now();
+        for (const id of ids) next[id] = { reply: r.reply, message: r.message ?? "", at, group };
+        return next;
+      });
       if (known) return; // the agent re-ran after --timeout: same request
-      setActiveId((a) => a ?? id);
-      const t = tabsRef.current.find((x) => tabId(x.project.id, x.worktree) === id);
-      const where = t ? `${t.project.name} · ${groupOf(t.project, t.worktree).label}` : r.path;
+      setActiveId((a) => a ?? ids[0]);
+      const t = tabsRef.current.find((x) => tabId(x.project.id, x.worktree) === ids[0]);
+      const where = group
+        ? `${group.name} (${ids.length} repos)`
+        : t
+          ? `${t.project.name} · ${groupOf(t.project, t.worktree).label}`
+          : r.path;
       toast(`Review requested for ${where}`);
       const body = r.message?.trim() ? `${where}\n${r.message.trim()}` : `${where}: an agent is waiting for your review`;
       void api.reviewAlert("Review requested", body).catch(() => {});
@@ -233,13 +249,24 @@ export default function App() {
       void un.then((f) => f());
     };
   }, []);
-  const reviewDone = useCallback((id: string) => setReviews(({ [id]: _, ...rest }) => rest), []);
+  /** A request was answered (or dropped): clear it on every tab sharing it. */
+  const reviewDone = useCallback(
+    (id: string) =>
+      setReviews((m) => {
+        const reply = m[id]?.reply;
+        return Object.fromEntries(Object.entries(m).filter(([k, v]) => k !== id && v.reply !== reply));
+      }),
+    [],
+  );
   // Drop requests whose agent stopped waiting (cancelled, or never came back after --timeout).
   useEffect(() => {
     const ids = Object.keys(reviews);
     if (!ids.length) return;
     const t = window.setInterval(() => {
+      const seen = new Set<string>(); // tabs of a folder share one request
       for (const [id, r] of Object.entries(reviewsRef.current)) {
+        if (seen.has(r.reply)) continue;
+        seen.add(r.reply);
         void api.reviewWaiting(r.reply).then((alive) => {
           if (alive || reviewsRef.current[id]?.reply !== r.reply) return;
           reviewDone(id);

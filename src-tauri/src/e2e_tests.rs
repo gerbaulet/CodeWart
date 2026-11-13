@@ -311,3 +311,54 @@ fn launcher_script_is_valid_and_points_at_the_app() {
     let _ = std::fs::remove_file(&path);
     assert!(ok, "generated launcher has a shell syntax error");
 }
+
+/// feat: commit c1 changes line 2; branch `other` (merged into feat) appends a
+/// line; uncommitted work changes line 4 and deletes nothing else.
+#[test]
+fn attribution_names_commits_and_merged_in_work() {
+    use crate::attribution::{self, WORKING};
+    let root = std::env::temp_dir().join(format!("codewart-e2e-attr-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let _guard = Repo { root: root.clone() };
+    let d = root.as_path();
+    let rev = |r: &str| git::git(d, &["rev-parse", r]).unwrap().trim().to_string();
+    sh(d, &["init", "-q", "-b", "main"]);
+    write(d, "f.txt", "a\nb\nc\nd\n");
+    sh(d, &["add", "."]);
+    sh(d, &["commit", "-qm", "base"]);
+    sh(d, &["checkout", "-qb", "feat"]);
+    write(d, "f.txt", "a\nB1\nc\nd\n");
+    sh(d, &["commit", "-qam", "c1"]);
+    let c1 = rev("HEAD");
+    sh(d, &["checkout", "-qb", "other", "main"]);
+    write(d, "f.txt", "a\nb\nc\nd\nO\n");
+    sh(d, &["commit", "-qam", "o1"]);
+    let o1 = rev("HEAD");
+    sh(d, &["checkout", "-q", "feat"]);
+    sh(d, &["merge", "-q", "--no-edit", "other"]);
+    write(d, "f.txt", "a\nB1\nc\nW\nO\n");
+
+    let a = attribution::attribute(d, &Selection::Branch, &DiffOptions::default()).unwrap();
+    assert_eq!(a.foreign, vec![o1.clone()]);
+    assert_eq!(a.commits.last().map(String::as_str), Some(WORKING));
+    let f = &a.files["f.txt"];
+    let add: std::collections::HashMap<u32, &str> =
+        f.add.iter().map(|(n, c)| (*n, c.as_str())).collect();
+    assert_eq!(add[&2], c1);
+    assert_eq!(add[&4], WORKING);
+    assert_eq!(add[&5], o1);
+    let del: std::collections::HashMap<u32, &str> =
+        f.del.iter().map(|(n, c)| (*n, c.as_str())).collect();
+    assert_eq!(del[&2], c1, "b was replaced by c1");
+    assert_eq!(del[&4], WORKING, "d was replaced in the working tree");
+
+    let h = git::history(d).unwrap();
+    let foreign: Vec<&str> = h
+        .commits
+        .iter()
+        .filter(|c| c.foreign)
+        .map(|c| c.sha.as_str())
+        .collect();
+    assert_eq!(foreign, vec![o1.as_str()]);
+}

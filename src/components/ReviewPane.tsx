@@ -6,9 +6,14 @@ import type { AgentSession, PendingReview, ReviewComment, ReviewSession } from "
 import { relativeTime, reviewMarkdown } from "../util";
 import { ChevronDown, Copy, Send } from "./Icons";
 import { Popover } from "./Popover";
+import { contribute, others } from "../reviewShare";
 
 interface Props {
   worktree: string;
+  /** Repository name (heads its section in a review shared by several repos). */
+  repoName: string;
+  /** Stable id of this tab. */
+  tabId: string;
   target: string;
   comments: ReviewComment[];
   onRemove: (id: string) => void;
@@ -42,6 +47,8 @@ export interface ReviewSnapshot {
 
 export function ReviewPane({
   worktree,
+  repoName,
+  tabId,
   target,
   comments,
   onRemove,
@@ -127,19 +134,45 @@ export function ReviewPane({
     }
   }, [worktree, toast]);
 
+  // A request shared by a folder of repos: offer this repo's review to the others.
+  const latest = useRef({ empty, snapshot, onArchive });
+  latest.current = { empty, snapshot, onArchive };
+  const shared = !!request?.group;
+  const section = (md: string) => `## ${repoName}\n\n${md.trimEnd()}`;
+  useEffect(() => {
+    if (!request?.group) return;
+    return contribute(request.reply, tabId, {
+      repo: repoName,
+      section: () => (latest.current.empty ? null : section(latest.current.snapshot().markdown)),
+      sent: () => {
+        const l = latest.current;
+        if (!l.empty) l.onArchive(l.snapshot(), "session", "agent (wart review)");
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request?.reply, request?.group, tabId, repoName]);
+
   /** Answer a `wart review` request: the waiting agent prints this and continues. */
   const reply = async (text: string, archive: boolean) => {
     if (!request) return;
     setBusy(true);
     try {
       const snap = snapshot();
+      // A folder of repos: include what was written in the other repos too.
+      const rest = shared && text !== DISMISSED ? others(request.reply, tabId) : [];
+      if (rest.length) {
+        const parts = [...(archive ? [section(text)] : []), ...rest.map((o) => o.section)];
+        text = `# Review of ${request.group!.name} (${parts.length} of ${request.group!.repos} repositories with feedback)\n\n${parts.join("\n\n")}`;
+      }
       await api.writeReviewReply(request.reply, text);
+      for (const o of rest) o.sent();
       onRequestDone();
       setPending(null);
       if (archive) {
         const r = onArchive(snap, "session", "agent (wart review)");
-        toast(`Review sent to the agent · archived as review #${r.n}`);
-      } else toast(text === APPROVED ? "Approved: the agent continues" : "Review request dismissed");
+        toast(`Review sent to the agent · archived as review #${r.n}${rest.length ? ` · with ${rest.length} more repo${rest.length === 1 ? "" : "s"}` : ""}`);
+      } else if (rest.length) toast(`Review of ${rest.length} repo${rest.length === 1 ? "" : "s"} sent to the agent`);
+      else toast(text === APPROVED ? "Approved: the agent continues" : "Review request dismissed");
     } catch (e) {
       toast(errorMessage(e), true);
     } finally {
@@ -187,80 +220,88 @@ export function ReviewPane({
           </button>
         </div>
       </div>
-      {request && (
-        <div className="rrequest" role="status">
-          <div className="r1">
-            <span className="waitdot" />
-            <b>The agent is waiting for your review</b>
-            <span className="faint">{relativeTime(request.at / 1000)}</span>
-          </div>
-          {request.message && <p className="msg">{request.message}</p>}
-          <div className="row">
-            <button className="linkbtn" disabled={busy} onClick={() => void reply(APPROVED, false)} title="Tell the agent there is nothing to change">
-              approve, no changes
-            </button>
-            <button className="linkbtn" disabled={busy} onClick={() => void reply(DISMISSED, false)} title="Release the agent without a review">
-              dismiss
-            </button>
-          </div>
-        </div>
-      )}
-      {comments.length > 0 && !preview && (
-        <div className="clist">
-          {comments.map((c) => (
-            <div key={c.id} className="citem" onClick={() => onJump(c)}>
-              <span className="loc">
-                {c.symbol ? `${c.symbol} · ` : ""}
-                {c.file}
-                {c.line > 0 ? `:${c.line}` : " · whole file"}
-              </span>
-              <button
-                className="rm"
-                aria-label="Remove comment"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemove(c.id);
-                }}
-              >
-                ×
-              </button>
-              <span className="txt">{c.body}</span>
+      {/* Scrolls as a whole when the pane is short; the send row stays put. */}
+      <div className="rbody">
+        {request && (
+          <div className="rrequest" role="status">
+            <div className="r1">
+              <span className="waitdot" />
+              <b>The agent is waiting for your review</b>
+              <span className="faint">{relativeTime(request.at / 1000)}</span>
             </div>
-          ))}
+            {request.message && <p className="msg">{request.message}</p>}
+            {request.group && (
+              <p className="msg">
+                For all {request.group.repos} repos in {request.group.name}: sending from any of them includes the comments of every repo.
+              </p>
+            )}
+            <div className="row">
+              <button className="linkbtn" disabled={busy} onClick={() => void reply(APPROVED, false)} title="Tell the agent there is nothing to change">
+                approve, no changes
+              </button>
+              <button className="linkbtn" disabled={busy} onClick={() => void reply(DISMISSED, false)} title="Release the agent without a review">
+                dismiss
+              </button>
+            </div>
+          </div>
+        )}
+        {comments.length > 0 && !preview && (
+          <div className="clist">
+            {comments.map((c) => (
+              <div key={c.id} className="citem" onClick={() => onJump(c)}>
+                <span className="loc">
+                  {c.symbol ? `${c.symbol} · ` : ""}
+                  {c.file}
+                  {c.line > 0 ? `:${c.line}` : " · whole file"}
+                </span>
+                <button
+                  className="rm"
+                  aria-label="Remove comment"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(c.id);
+                  }}
+                >
+                  ×
+                </button>
+                <span className="txt">{c.body}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="mdwrap">
+          {preview ? (
+            <pre>{markdown}</pre>
+          ) : (
+            <textarea
+              value={note}
+              onChange={(e) => onNote(e.target.value)}
+              placeholder={
+                comments.length
+                  ? "Overall notes for the agent (markdown)…"
+                  : "Write feedback in markdown, or click a line number in the diff to comment on code."
+              }
+              aria-label="Review notes"
+            />
+          )}
         </div>
-      )}
-      <div className="mdwrap">
-        {preview ? (
-          <pre>{markdown}</pre>
-        ) : (
-          <textarea
-            value={note}
-            onChange={(e) => onNote(e.target.value)}
-            placeholder={
-              comments.length
-                ? "Overall notes for the agent (markdown)…"
-                : "Write feedback in markdown, or click a line number in the diff to comment on code."
-            }
-            aria-label="Review notes"
-          />
+        {askArchive && (
+          <div className="rprompt" role="alert">
+            <p>
+              The agent made changes since you copied this review. Treat them as the new version and archive this as{" "}
+              <b>review #{nextNumber}</b>?
+            </p>
+            <div className="row">
+              <button className="btn sm pri" onClick={archiveCopied}>
+                Archive &amp; start new review
+              </button>
+              <button className="btn sm" onClick={() => setPending(null)}>
+                Not now
+              </button>
+            </div>
+          </div>
         )}
       </div>
-      {askArchive && (
-        <div className="rprompt" role="alert">
-          <p>
-            The agent made changes since you copied this review. Treat them as the new version and archive this as{" "}
-            <b>review #{nextNumber}</b>?
-          </p>
-          <div className="row">
-            <button className="btn sm pri" onClick={archiveCopied}>
-              Archive &amp; start new review
-            </button>
-            <button className="btn sm" onClick={() => setPending(null)}>
-              Not now
-            </button>
-          </div>
-        </div>
-      )}
       <div className="rfoot">
         <div className="row">
           <label className="chk">
@@ -291,7 +332,7 @@ export function ReviewPane({
             <Copy size={14} /> Copy
           </button>
           {request ? (
-            <button className="btn pri" style={{ flex: 1 }} disabled={empty || busy} onClick={() => void reply(markdown.trimEnd(), true)}>
+            <button className="btn pri" style={{ flex: 1 }} disabled={(empty && !shared) || busy} onClick={() => void reply(empty ? APPROVED : markdown.trimEnd(), !empty)}>
               <Send size={14} /> Send to agent
             </button>
           ) : (

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentSession,
+  Attribution,
   CallGraph,
   CliStatus,
   Discovery,
@@ -28,6 +29,8 @@ export const api = {
   history: (worktree: string) => invoke<History>("history", { worktree }),
   diff: (worktree: string, selection: Selection, ignoreWhitespace: boolean) =>
     invoke<DiffResult>("diff", { worktree, selection, options: { ignoreWhitespace } }),
+  attribution: (worktree: string, selection: Selection, ignoreWhitespace: boolean) =>
+    invoke<Attribution>("attribution", { worktree, selection, options: { ignoreWhitespace } }),
   callGraph: (worktree: string, selection: Selection, scope: GraphScope) =>
     invoke<CallGraph>("call_graph", { worktree, selection, scope }),
   fingerprint: (worktree: string) => invoke<string>("fingerprint", { worktree }),

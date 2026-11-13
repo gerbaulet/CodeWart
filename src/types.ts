@@ -39,6 +39,8 @@ export interface Commit {
   additions: number;
   deletions: number;
   files: number;
+  /** Came in through a merge from another branch. */
+  foreign: boolean;
 }
 
 export interface WorkingStats {
@@ -67,6 +69,29 @@ export interface DiffLine {
   old: number | null;
   new: number | null;
   text: string;
+  /** Commit the change came from (multi-commit selections; "working" = uncommitted). */
+  commit?: string;
+}
+
+/** Which commit each changed line of a multi-commit diff came from. */
+export interface Attribution {
+  /** Commits that came in through a merge from another branch. */
+  foreign: string[];
+  /** Commits in the selection, oldest first ("working" last when included). */
+  commits: string[];
+  files: Record<string, { add: [number, string][]; del: [number, string][] }>;
+}
+
+/** Display info for a commit named on diff lines. */
+export interface CommitBadge {
+  sha: string;
+  short: string;
+  subject: string;
+  /** Merged in from another branch (or the merge commit itself). */
+  foreign: boolean;
+  hidden: boolean;
+  /** Colour index (0–5). */
+  tone: number;
 }
 
 export interface Hunk {
@@ -88,7 +113,9 @@ export type FileTag =
   | "config"
   | "rename"
   | "whitespace"
-  | "comments";
+  | "comments"
+  | "commit"
+  | "merged";
 
 export interface FileDiff {
   path: string;
@@ -178,6 +205,8 @@ export interface Filters {
   hideTests: boolean;
   hideNonFunctional: boolean;
   ignoreWhitespace: boolean;
+  /** Hide code that came in through merges from other branches. */
+  hideForeign?: boolean;
 }
 
 export type View = "diff" | "calls";
@@ -239,4 +268,6 @@ export interface PendingReview {
   message: string;
   /** When it was requested (ms since epoch). */
   at: number;
+  /** Requested for a folder of repos: its name and how many repos share the request. */
+  group?: { name: string; repos: number };
 }

@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { gapSize, gapsOf, rowsWithContext, unfoldGap, type Unfold } from "../expand";
-import type { FileDiff, ReviewComment } from "../types";
+import type { CommitBadge, FileDiff, ReviewComment } from "../types";
 import { TAG_LABEL, isFileComment, splitPath } from "../util";
 import { CodeLines, FileComments, type Row } from "./CodeLines";
 import { ChevronDown, ChevronRight, Code, Comment } from "./Icons";
@@ -26,11 +26,14 @@ interface Props {
   scrollRef?: MutableRefObject<HTMLDivElement | null>;
   /** Full text of a file on the diff's new side (to unfold unchanged lines). */
   loadFile: (path: string) => Promise<string | null>;
+  /** Commits named on changed lines (multi-commit selections). */
+  commits?: Map<string, CommitBadge> | null;
+  onCommit?: (sha: string, action: "only" | "hide" | "show") => void;
 }
 
 const NO_COMMENTS: ReviewComment[] = [];
 
-export function DiffView({ files, comments, onAddComment, onRemoveComment, onUpdateComment, target, onActiveFile, onOpenInEditor, sendLabel, scrollRef, loadFile }: Props) {
+export function DiffView({ files, comments, onAddComment, onRemoveComment, onUpdateComment, target, onActiveFile, onOpenInEditor, sendLabel, scrollRef, loadFile, commits, onCommit }: Props) {
   const scroller = useRef<HTMLDivElement | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [flash, setFlash] = useState<string | null>(null);
@@ -134,6 +137,8 @@ export function DiffView({ files, comments, onAddComment, onRemoveComment, onUpd
           onOpenInEditor={onOpenInEditor}
           sendLabel={sendLabel}
           loadFile={loadFile}
+          commits={commits}
+          onCommit={onCommit}
         />
       ))}
     </div>
@@ -152,6 +157,8 @@ interface BlockProps {
   onOpenInEditor: (path: string, line?: number) => void;
   sendLabel: string;
   loadFile: (path: string) => Promise<string | null>;
+  commits?: Map<string, CommitBadge> | null;
+  onCommit?: (sha: string, action: "only" | "hide" | "show") => void;
 }
 
 const FileBlock = memo(function FileBlock({
@@ -166,6 +173,8 @@ const FileBlock = memo(function FileBlock({
   onOpenInEditor,
   sendLabel,
   loadFile,
+  commits,
+  onCommit,
 }: BlockProps) {
   const { dir, name } = splitPath(file.path);
   // Unfolded unchanged lines, GitHub-style. Reset when the diff itself changes.
@@ -264,6 +273,7 @@ const FileBlock = memo(function FileBlock({
             </div>
           )}
           {rows.length > 0 && (
+            <div className="dcode">
             <CodeLines
               path={file.path}
               rows={rows}
@@ -274,7 +284,10 @@ const FileBlock = memo(function FileBlock({
               flash={flash}
               sendLabel={sendLabel}
               onExpand={expandable ? onExpand : undefined}
+              commits={commits}
+              onCommit={onCommit}
             />
+            </div>
           )}
           {file.truncated && file.hunks.length > 0 && <div className="dnote">Diff truncated — open the file to see the rest.</div>}
         </>

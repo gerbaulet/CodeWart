@@ -6,6 +6,7 @@
 #   wart review [-m MESSAGE] [--timeout SECS] [PATH]
 #                     ask for a review of the worktree at PATH (default: .) in
 #                     CodeWart and wait for it; prints the review when it is sent.
+#                     PATH may be a folder of repos: one review covers all of them.
 #                     Exit 0: review received · 3: --timeout passed, still waiting
 #                     (run it again to keep waiting) · 1: error.
 #   wart agent        guide for coding agents (what CodeWart is for, how to use it)
@@ -64,10 +65,18 @@ if [ "$1" = "review" ]; then
     shift
   done
   case "$timeout" in ''|*[!0-9]*) echo "wart review: --timeout needs a number of seconds" >&2; exit 1 ;; esac
-  top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || {
-    echo "wart review: $dir is not inside a git repository" >&2
-    exit 1
-  }
+  if ! top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)"; then
+    # A folder of repos (e.g. one feature's worktrees side by side): review them together.
+    top="$(cd "$dir" 2>/dev/null && pwd)" || { echo "wart review: $dir does not exist" >&2; exit 1; }
+    found=""
+    for g in "$top"/*/.git "$top"/*/*/.git; do
+      [ -e "$g" ] && { found=1; break; }
+    done
+    [ -n "$found" ] || {
+      echo "wart review: $dir is neither inside a git repository nor a folder of repositories" >&2
+      exit 1
+    }
+  fi
   rdir="${TMPDIR:-/tmp}"
   rdir="${rdir%/}/codewart-reviews"
   mkdir -p "$rdir"

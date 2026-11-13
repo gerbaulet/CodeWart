@@ -9,7 +9,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { highlightLine } from "../highlight";
-import type { DiffLine, ReviewComment } from "../types";
+import type { CommitBadge, DiffLine, ReviewComment } from "../types";
 import { languageOf, newId } from "../util";
 
 /** Expand controls on a hunk header: unchanged lines hidden above it. */
@@ -49,6 +49,9 @@ interface Props {
   sendLabel?: string;
   /** Unfold hidden unchanged lines (diff view); without it hunk headers are plain. */
   onExpand?: (gap: number, dir: "up" | "down" | "all") => void;
+  /** Name the commit of each run of changed lines (multi-commit diffs). */
+  commits?: Map<string, CommitBadge> | null;
+  onCommit?: (sha: string, action: "only" | "hide" | "show") => void;
 }
 
 function sideOf(l: DiffLine): { side: "new" | "old"; n: number } {
@@ -72,7 +75,7 @@ export function submitOnEnter(e: ReactKeyboardEvent<HTMLTextAreaElement>, submit
   }
 }
 
-export const CodeLines = memo(function CodeLines({ path, rows, comments, onAddComment, onRemoveComment, onUpdateComment, flash, sendLabel, onExpand }: Props) {
+export const CodeLines = memo(function CodeLines({ path, rows, comments, onAddComment, onRemoveComment, onUpdateComment, flash, sendLabel, onExpand, commits, onCommit }: Props) {
   const lang = languageOf(path);
   const [draft, setDraft] = useState<Draft | null>(null);
   /** Id of a saved comment being edited. */
@@ -202,9 +205,11 @@ export const CodeLines = memo(function CodeLines({ path, rows, comments, onAddCo
   const selLo = dragSel ? Math.min(dragSel.from, dragSel.to) : draft ? draft.rowFrom : -1;
   const selHi = dragSel ? Math.max(dragSel.from, dragSel.to) : draft ? draft.rowTo : -2;
 
+  let runCommit: string | undefined;
   return (
     <div className="lines">
       {rows.map((r, i) => {
+        if (r.kind === "hunk") runCommit = undefined;
         if (r.kind === "hunk") {
           const x = onExpand ? r.expand : undefined;
           if (x) return <ExpandRow key={i} text={r.text} x={x} onExpand={onExpand!} />;
@@ -223,11 +228,16 @@ export const CodeLines = memo(function CodeLines({ path, rows, comments, onAddCo
         const drafting = !dragSel && draft && draft.rowTo === i;
         const inSel = i >= selLo && i <= selHi;
         const cls = `ln ${r.kind === "ctx" ? "" : r.kind}${commentedRows.has(i) ? " commented" : ""}${flash === k ? " target" : ""}${inSel ? " sel" : ""}`;
+        const badge = r.commit ? commits?.get(r.commit) : undefined;
+        const chip = badge && r.commit !== runCommit && onCommit ? <CommitChip b={badge} onCommit={onCommit} /> : null;
+        if (badge) runCommit = r.commit;
         return (
           <Fragment key={i}>
+            {chip}
             <div
               className={cls}
               data-l={k}
+              data-tone={badge?.tone}
               onClick={(e) => onLineClick(i, e)}
               onMouseEnter={() => onRowEnter(i)}
               title="Click to comment · drag line numbers or shift-click for several lines"
@@ -317,6 +327,28 @@ export const CodeLines = memo(function CodeLines({ path, rows, comments, onAddCo
     </div>
   );
 });
+
+/** Names the commit a run of changed lines came from, with quick filters. */
+function CommitChip({ b, onCommit }: { b: CommitBadge; onCommit: NonNullable<Props["onCommit"]> }) {
+  return (
+    <div className="ln cchip" data-tone={b.tone}>
+      <span className="cchip-in">
+        <span className="cdot" />
+        <b>{b.short}</b>
+        {b.subject && <span className="subj">{b.subject}</span>}
+        {b.foreign && <span className="mtag">merged in</span>}
+        <span className="acts">
+          <button className="linkbtn" onClick={() => onCommit(b.sha, "only")} title="Show only this commit's changes">
+            only this
+          </button>
+          <button className="linkbtn" onClick={() => onCommit(b.sha, "hide")} title="Hide this commit's changes (toggle it in the history to bring them back)">
+            hide
+          </button>
+        </span>
+      </span>
+    </div>
+  );
+}
 
 /** A hunk header with GitHub-style buttons to unfold the unchanged lines above it. */
 function ExpandRow({ text, x, onExpand }: { text: string; x: ExpandInfo; onExpand: NonNullable<Props["onExpand"]> }) {

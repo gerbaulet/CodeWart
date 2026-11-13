@@ -7,7 +7,7 @@ CodeWart runs on the user's machine (macOS, Linux, Windows). It never edits code
 ## Commands
 
 - `wart [PATH...]`: open a repository, any of its worktrees, or a folder of repositories (default: the current directory) in CodeWart. If CodeWart is running, it opens as a tab there. The command returns immediately. Use it to show the user what you changed.
-- `wart review [-m MESSAGE] [--timeout SECS] [PATH]`: ask the user to review the worktree at PATH (default: current directory) and **wait** until they respond. The message is shown to the reviewer next to your changes: say briefly what you changed and what deserves a close look. Uncommitted changes are included.
+- `wart review [-m MESSAGE] [--timeout SECS] [PATH]`: ask the user to review the worktree at PATH (default: current directory) and **wait** until they respond. The message is shown to the reviewer next to your changes: say briefly what you changed and what deserves a close look. Uncommitted changes are included. If PATH (or the current directory) is a folder holding several repos or worktrees (one feature across repos), the review covers all of them and the reply has one `## <repo>` section per repo with feedback.
   - Exit `0`: the response is on stdout (see below).
   - Exit `3`: `--timeout` passed with no response. The request stays open, so run the same command again to keep waiting. Use this when your shell tool has a time limit (e.g. Claude Code's Bash tool: at most 10 minutes, so use `--timeout 570` and re-run on exit 3).
   - Exit `1`: error (not a git repository, CodeWart not installed).
