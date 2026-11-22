@@ -1,6 +1,6 @@
 [package]
 name = "codewart"
-version = "0.1.2"
+version = "0.1.3"
 description = "Review diffs and call chains produced by coding agents"
 authors = ["Byte Brothers"]
 edition = "2021"

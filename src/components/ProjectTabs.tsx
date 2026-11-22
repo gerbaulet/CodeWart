@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CliStatus, Project, PullRequest } from "../types";
 import { relativeTime, tildify } from "../util";
 import { Branch, Close, Monitor, Moon, Sun, Plus, Terminal, WorktreeIcon } from "./Icons";
@@ -23,6 +23,8 @@ export interface TabInfo {
 interface Props {
   tabs: TabInfo[];
   activeId: string | null;
+  /** Tabs a `wart` command was just run from (flashed; `n` restarts the flash). */
+  called?: { ids: string[]; n: number } | null;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onCloseGroup: (key: string) => void;
@@ -95,6 +97,15 @@ export function ProjectTabs(p: Props) {
     const id = window.setInterval(() => setClock((c) => c + 1), 60_000);
     return () => window.clearInterval(id);
   }, []);
+  const nav = useRef<HTMLElement>(null);
+  const calledIds = new Set(p.called?.ids ?? []);
+  // Bring the branch `wart` was called from into view.
+  useEffect(() => {
+    if (!p.called) return;
+    requestAnimationFrame(() =>
+      nav.current?.querySelector(".tabgroup.called")?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" }),
+    );
+  }, [p.called]);
 
   const tab = (t: TabInfo) => {
     const pr = t.pr && prInfo(t.pr);
@@ -102,7 +113,7 @@ export function ProjectTabs(p: Props) {
     return (
       <button
         key={t.id}
-        className={`ptab${t.id === p.activeId ? " on" : ""}`}
+        className={`ptab${t.id === p.activeId ? " on" : ""}${calledIds.has(t.id) ? " called" : ""}`}
         onClick={() => p.onSelect(t.id)}
         onAuxClick={(e) => e.button === 1 && p.onClose(t.id)}
         title={`${t.project.name} · ${kind}\n${tildify(t.worktree)}${t.updated ? `\nUpdated ${relativeTime(t.updated)} ago` : ""}`}
@@ -142,11 +153,11 @@ export function ProjectTabs(p: Props) {
 
   return (
     <header className="tabsbar fl" data-tauri-drag-region>
-      <nav className="ptabs" aria-label="Open projects" data-tauri-drag-region>
+      <nav ref={nav} className="ptabs" aria-label="Open projects" data-tauri-drag-region>
         {units.map((u) => (
           <div
-            key={u.key}
-            className={`tabgroup${u.tabs.some((t) => t.id === p.activeId) ? " active" : ""}`}
+            key={u.tabs.some((t) => calledIds.has(t.id)) ? `${u.key}#${p.called!.n}` : u.key}
+            className={`tabgroup${u.tabs.some((t) => t.id === p.activeId) ? " active" : ""}${u.tabs.some((t) => calledIds.has(t.id)) ? " called" : ""}`}
             style={{ ["--gc" as string]: u.tone }}
             role="group"
             aria-label={`Repositories on ${u.label}`}

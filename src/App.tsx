@@ -105,6 +105,16 @@ export default function App() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), err ? 6000 : 2600);
   }, []);
 
+  // ---- `wart` called from a branch: switch to it and make it stand out ------
+  const [called, setCalled] = useState<{ ids: string[]; n: number } | null>(null);
+  const calledFrom = useCallback((ids: string[]) => {
+    if (!ids.length) return;
+    setActiveId(ids[0]);
+    const n = Date.now();
+    setCalled({ ids, n });
+    setTimeout(() => setCalled((c) => (c?.n === n ? null : c)), 2600);
+  }, []);
+
   // ---- theme ---------------------------------------------------------------
   useEffect(() => {
     save(STORE.theme, theme);
@@ -157,22 +167,27 @@ export default function App() {
 
   /** Open whatever is at `path`: a repo, or every repo in a folder (as a group). */
   const openPath = useCallback(
-    async (path: string, opts: { activate?: boolean } = {}) => {
+    async (path: string, opts: { activate?: boolean; cli?: boolean } = {}) => {
       try {
         const d = await api.discover(path);
-        if (d.kind === "repo") return void (await openRepo(d.path, opts));
-        let first: string | null = null;
+        if (d.kind === "repo") {
+          const id = await openRepo(d.path, opts);
+          if (id && opts.cli) calledFrom([id]);
+          return;
+        }
+        const ids: string[] = [];
         for (const repo of d.repos) {
           const id = await openRepo(repo, { activate: false, worktree: repo });
-          first ??= id;
+          if (id) ids.push(id);
         }
-        if (first && opts.activate !== false) setActiveId(first);
+        if (opts.cli) calledFrom(ids);
+        else if (ids[0] && opts.activate !== false) setActiveId(ids[0]);
         toast(`Opened ${d.repos.length} repositories from ${d.name}`);
       } catch (e) {
         toast(errorMessage(e), true);
       }
     },
-    [openRepo, toast],
+    [openRepo, toast, calledFrom],
   );
 
   const bootRef = useRef(false);
@@ -188,7 +203,7 @@ export default function App() {
       if (savedActive) setActiveId((a) => a ?? savedActive);
       const launch = await api.launchPaths().catch(() => [] as string[]);
       const launchReview = await api.launchReview().catch(() => null);
-      for (const p of launch) if (p !== launchReview?.path) await openPath(p);
+      for (const p of launch) if (p !== launchReview?.path) await openPath(p, { cli: true });
       if (launchReview) await onReviewRequestRef.current(launchReview);
       setTabs((ts) => {
         setActiveId((a) => (a && ts.some((t) => tabId(t.project.id, t.worktree) === a) ? a : ts[0] ? tabId(ts[0].project.id, ts[0].worktree) : null));
@@ -199,7 +214,7 @@ export default function App() {
   }, [openRepo, openPath]);
 
   useEffect(() => {
-    const un = listen<string>("open-path", (e) => void openPath(e.payload));
+    const un = listen<string>("open-path", (e) => void openPath(e.payload, { cli: true }));
     return () => {
       void un.then((f) => f());
     };
@@ -228,7 +243,7 @@ export default function App() {
         return next;
       });
       if (known) return; // the agent re-ran after --timeout: same request
-      setActiveId((a) => a ?? ids[0]);
+      calledFrom(ids);
       const t = tabsRef.current.find((x) => tabId(x.project.id, x.worktree) === ids[0]);
       const where = group
         ? `${group.name} (${ids.length} repos)`
@@ -239,7 +254,7 @@ export default function App() {
       const body = r.message?.trim() ? `${where}\n${r.message.trim()}` : `${where}: an agent is waiting for your review`;
       void api.reviewAlert("Review requested", body).catch(() => {});
     },
-    [openRepo, toast],
+    [openRepo, toast, calledFrom],
   );
   const onReviewRequestRef = useRef(onReviewRequest);
   onReviewRequestRef.current = onReviewRequest;
@@ -439,6 +454,7 @@ export default function App() {
       <ProjectTabs
         tabs={infos}
         activeId={activeId}
+        called={called}
         onSelect={setActiveId}
         onClose={(id) => closeTabs([id])}
         onCloseGroup={(key) => closeTabs(infos.filter((t) => t.group.key === key).map((t) => t.id))}

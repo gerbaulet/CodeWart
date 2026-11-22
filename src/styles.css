@@ -126,6 +126,13 @@ code, pre, .mono { font-family: var(--mono); }
 :root[data-theme="light"] { --g1: #5f9a00; --g2: #2f6fd6; --g3: #8a4fc8; --g4: #c06a12; --g5: #0f8f7e; --g6: #c43d78; }
 .tabgroup { position: relative; display: flex; align-items: center; gap: 2px; flex: none; padding: 3px 3px 3px 4px; border-radius: 999px; background: color-mix(in srgb, var(--gc) 9%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--gc) 30%, transparent); }
 .tabgroup.active { background: color-mix(in srgb, var(--gc) 14%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--gc) 70%, transparent); }
+/* The branch a `wart` command was just run from. */
+.tabgroup.called { animation: cw-called 0.8s ease-in-out 3; }
+.ptab.called { color: var(--text); }
+@keyframes cw-called {
+  50% { background: color-mix(in srgb, var(--gc) 32%, transparent); box-shadow: inset 0 0 0 2px var(--gc), 0 0 0 4px color-mix(in srgb, var(--gc) 28%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .tabgroup.called { animation: none; box-shadow: inset 0 0 0 2px var(--gc); } }
 .tabgroup .glabel { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px 0 10px; border-radius: 999px; background: color-mix(in srgb, var(--gc) 22%, transparent); color: var(--text); font: 500 12px var(--mono); white-space: nowrap; }
 .tabgroup .glabel .age { color: var(--muted); font: 400 11px var(--sans); }
 .tabgroup .glabel .x { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; color: var(--faint); cursor: pointer; margin-left: -2px; }
