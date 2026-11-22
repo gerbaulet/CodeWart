@@ -219,3 +219,7 @@ site/                     landing page for GitHub Pages
 ```
 
 `make test` runs the Rust unit and end-to-end tests plus the TypeScript type-check. `make ci` also checks formatting, clippy and the production UI build.
+
+## License
+
+[MIT](LICENSE) © Byte Brothers

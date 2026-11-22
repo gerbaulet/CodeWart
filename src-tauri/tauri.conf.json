@@ -42,6 +42,7 @@
     ],
     "copyright": "\u00a9 Byte Brothers",
     "publisher": "Byte Brothers",
+    "license": "MIT",
     "longDescription": "CodeWart is a desktop helper for reviewing code written by coding agents: diffs per commit or worktree, a call-chain diagram of new functions, and review comments sent back to the agent session.",
     "linux": {
       "deb": {
