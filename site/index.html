@@ -138,12 +138,28 @@ h2 { margin: 0 0 28px; font: 500 26px/1.2 var(--sans); text-align: center; }
 .steps pre { margin: 8px 0 0; padding: 12px 14px; border-radius: 10px; background: var(--code); border: 1px solid var(--edge); color: var(--text); font: 400 13px/1.6 var(--mono); overflow-x: auto; }
 .steps code { color: var(--text); }
 
+/* agents */
+.sub { max-width: 62ch; margin: -14px auto 28px; text-align: center; color: var(--muted); text-wrap: pretty; }
+.flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.flow .card { position: relative; padding-top: 50px; }
+.flow .card::before { content: attr(data-n); position: absolute; left: 22px; top: 18px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--acc); color: var(--onacc); font: 500 12px var(--sans); }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+.two .card p + p, .two .card p + .code, .two .card .code + p { margin-top: 12px; }
+.code { position: relative; }
+.code pre { margin: 0; padding: 12px 80px 12px 14px; border-radius: 10px; background: var(--code); border: 1px solid var(--edge); color: var(--text); font: 400 12.5px/1.6 var(--mono); overflow-x: auto; white-space: pre; }
+.code pre.wrap-lines { white-space: pre-wrap; word-break: break-word; }
+.code .copy { position: absolute; top: 7px; right: 7px; height: 26px; padding: 0 10px; border: 1px solid var(--edge); border-radius: 999px; background: var(--pane2); color: var(--muted); font: 400 12px var(--sans); cursor: pointer; }
+.code .copy:hover { color: var(--text); background: var(--sel); }
+.prompts { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+.prompts li { margin: 4px 0; font-style: italic; }
+.card .tag2 { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--sel); color: var(--muted); font: 400 11px var(--sans); vertical-align: 2px; }
 footer { margin-top: 80px; padding: 28px 0 40px; border-top: 1px solid var(--edge); display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--faint); font-size: 13px; }
 footer .grow { flex: 1; }
 footer a { color: var(--muted); }
 
 @media (max-width: 860px) {
-  .grid, .dl { grid-template-columns: 1fr; }
+  .grid, .dl, .flow, .two { grid-template-columns: minmax(0, 1fr); }
+  .code pre { padding: 40px 14px 12px; }
   .mock .body { grid-template-columns: minmax(0, 1fr); }
   .mock .col.side { display: none; }
   .mock .col + .col { border-left: 0; }
@@ -158,6 +174,7 @@ footer a { color: var(--muted); }
 <rect width="2048" height="2048" fill="currentColor" mask="url(#sg0)"/>
 </svg><span><b>Code</b><span>Wart</span></span></a>
     <span class="grow"></span>
+    <a class="gh" href="#agents">Agents</a>
     <a class="gh" href="https://github.com/ivostrugar/CodeWart">GitHub</a>
   </nav>
 
@@ -285,8 +302,52 @@ footer a { color: var(--muted); }
       <li><b>Open any repo, worktree or folder of repos</b> from your terminal:
         <pre>wart .</pre>
         Running several agents? Give each its own worktree (<code>git worktree add ../app.feature -b feature</code>) and open them all.</li>
-      <li><b>Let your agent ask for reviews.</b> Agents learn how from <code>wart agent</code>. Claude Code users can install the bundled skill. The agent runs <code>wart review</code> and waits until you send your review.</li>
+      <li><b>Let your agent ask for reviews.</b> Install the Claude Code skill or add a few lines to your <code>AGENTS.md</code>, as shown <a href="#agents">below</a>. The agent then runs <code>wart review</code> and waits until you send your review.</li>
     </ol>
+  </section>
+
+  <section id="agents">
+    <h2>Review rounds with your agents</h2>
+    <p class="sub">With <code>wart review</code>, an agent asks for your review and waits for it. No terminal plugins and no copy and paste: the agent stops, you review in CodeWart, and your comments come back to it as its next instructions.</p>
+    <div class="flow">
+      <div class="card" data-n="1">
+        <h3>The agent asks</h3>
+        <p>When it finishes a step, the agent runs <code>wart review -m "what changed, what to check"</code>. CodeWart opens its worktree, marks the tab and shows the message next to the diff.</p>
+      </div>
+      <div class="card" data-n="2">
+        <h3>You review</h3>
+        <p>Comment on lines, functions or whole files and add overall notes. Then click <b>Send to agent</b>, or <b>Approve</b> if nothing needs to change.</p>
+      </div>
+      <div class="card" data-n="3">
+        <h3>The agent addresses it</h3>
+        <p>It receives your review as markdown with file and line references, works through every comment and asks for the next round. Each round is archived in CodeWart.</p>
+      </div>
+    </div>
+    <div class="two">
+      <div class="card">
+        <h3>Claude Code <span class="tag2">skill</span></h3>
+        <p>The <code>codewart-review</code> skill teaches Claude when to ask for your review, how to keep waiting past its 10-minute command limit, and how to address every comment. Install it with:</p>
+        <div class="code"><pre>mkdir -p ~/.claude/skills/codewart-review
+curl -fsSL -o ~/.claude/skills/codewart-review/SKILL.md \
+  https://raw.githubusercontent.com/ivostrugar/CodeWart/main/skills/codewart-review/SKILL.md</pre><button class="copy" type="button">Copy</button></div>
+        <p>Then ask for it in plain words:</p>
+        <ul class="prompts">
+          <li>Implement token rotation in src/session.ts, then get my review in CodeWart and address it.</li>
+          <li>Fix the flaky login test. Work in review rounds with me in CodeWart until I approve.</li>
+          <li>Refactor the router and ask for my review after each step.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Codex, Gemini CLI, Aider, Cursor… <span class="tag2">any agent</span></h3>
+        <p>Add this to the repo's <code>AGENTS.md</code> (or <code>CLAUDE.md</code>, <code>GEMINI.md</code>, <code>CONVENTIONS.md</code>):</p>
+        <div class="code"><pre class="wrap-lines">## Code review
+When you finish a task, run `wart review -m "&lt;what changed, what to check&gt;"` and wait for my review
+(re-run it if it exits 3). Address every comment it prints, then ask for the next review.
+If it prints APPROVED, you're done. Run `wart agent` for details.</pre><button class="copy" type="button">Copy</button></div>
+        <p>The agent learns the rest from <code>wart agent</code>, which prints the <a href="llms.txt">agent guide</a>: commands, exit codes and the review format.</p>
+        <p><b>Tip:</b> one worktree per agent task, opened with <code>wart .</code>, lets you review one agent while the others keep working. Run <code>wart review</code> from a folder of worktrees to review one feature across several repos at once.</p>
+      </div>
+    </div>
   </section>
 
   <footer>
@@ -316,6 +377,17 @@ footer a { color: var(--muted); }
     document.getElementById("cta").href = card.querySelector("[data-asset]").href;
     document.getElementById("cta-label").textContent = "Download for " + names[os];
   }
+
+  // Copy buttons on code blocks.
+  document.querySelectorAll(".code .copy").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var text = b.parentNode.querySelector("pre").textContent;
+      (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(
+        function () { b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500); },
+        function () { b.textContent = "Select and copy"; }
+      );
+    });
+  });
 
   // Show the latest version; silently skipped if the API is unavailable or rate-limited.
   fetch("https://api.github.com/repos/" + REPO + "/releases/latest")
